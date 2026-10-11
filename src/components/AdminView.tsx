@@ -428,7 +428,7 @@ export const AdminView: React.FC<AdminViewProps> = ({
                     <td>
                       <button
                         onClick={async () => {
-                          const msg = `Hello ${w.full_name}, this is a test notification from ApexRecords Admin.`;
+                          const msg = `Hello ${w.full_name}, this is a test notification from VertextPay Admin.`;
                           const res = await SMSService.sendSMS({
                             mobile: w.phone_number,
                             recipientName: w.full_name,

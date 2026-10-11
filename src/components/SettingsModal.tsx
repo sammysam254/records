@@ -90,7 +90,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       const res = await SMSService.sendSMS({
         mobile: testPhone,
         recipientName: 'Sammy Seth',
-        message: 'Hello Sammy Seth, this is a live test SMS from your ApexRecords platform.',
+        message: 'Hello Sammy Seth, this is a live test SMS from your VertextPay platform.',
         messageType: 'custom'
       });
 

@@ -117,7 +117,7 @@ export function App() {
       }}>
         <div style={{ maxWidth: '1200px', margin: '0 auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
           <div>
-            <strong>ApexRecords</strong> &copy; 2026. Worker Weekly Records & SMS Disbursement Platform.
+            <strong>VertextPay</strong> &copy; 2026. Worker Weekly Records & SMS Disbursement Platform.
           </div>
           <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
             <span>Powered by <strong>TextSMS Kenya</strong> & <strong>Upstash Redis</strong></span>
