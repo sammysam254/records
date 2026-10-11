@@ -11,7 +11,10 @@ import {
   Users, 
   LogOut,
   Menu,
-  X
+  X,
+  LogIn,
+  Lock,
+  UserPlus
 } from 'lucide-react';
 
 interface NavbarProps {
@@ -19,16 +22,20 @@ interface NavbarProps {
   onOpenSettings: () => void;
   onSwitchUser: (role: 'worker' | 'admin' | 'new') => void;
   onLogout: () => void;
+  onOpenAuth: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
   currentUser,
   onOpenSettings,
   onSwitchUser,
-  onLogout
+  onLogout,
+  onOpenAuth
 }) => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const isAuthorizedAdmin = currentUser?.email.toLowerCase() === ADMIN_EMAIL.toLowerCase();
+  const isAuthorizedAdmin = Boolean(
+    currentUser && currentUser.email.toLowerCase() === ADMIN_EMAIL.toLowerCase()
+  );
 
   return (
     <>
@@ -111,96 +118,126 @@ export const Navbar: React.FC<NavbarProps> = ({
 
           {/* Desktop Right Actions */}
           <div className="hide-on-mobile" style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
-            {/* Admin Mode toggle */}
-            {isAuthorizedAdmin && (
-              <div style={{ display: 'flex', background: 'rgba(0,0,0,0.3)', padding: '3px', borderRadius: '10px', border: '1px solid var(--border-subtle)' }}>
+            
+            {/* If Not Logged In: Show Sign In & Admin Login buttons */}
+            {!currentUser ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                 <button
-                  onClick={() => onSwitchUser('worker')}
-                  style={{
-                    padding: '0.35rem 0.7rem',
-                    fontSize: '0.75rem',
-                    fontWeight: 600,
-                    borderRadius: '7px',
-                    border: 'none',
-                    cursor: 'pointer',
-                    background: currentUser?.role === 'worker' ? 'var(--accent-cyan)' : 'transparent',
-                    color: currentUser?.role === 'worker' ? '#0a0d14' : 'var(--text-muted)'
-                  }}
+                  onClick={onOpenAuth}
+                  className="btn-primary"
+                  style={{ padding: '0.45rem 0.85rem', fontSize: '0.8rem' }}
                 >
-                  Worker Mode
+                  <LogIn size={15} /> Worker Sign In
                 </button>
                 <button
-                  onClick={() => onSwitchUser('admin')}
-                  style={{
-                    padding: '0.35rem 0.7rem',
-                    fontSize: '0.75rem',
-                    fontWeight: 600,
-                    borderRadius: '7px',
-                    border: 'none',
-                    cursor: 'pointer',
-                    background: currentUser?.role === 'admin' ? 'var(--accent-violet)' : 'transparent',
-                    color: currentUser?.role === 'admin' ? '#ffffff' : 'var(--text-muted)'
-                  }}
+                  onClick={onOpenAuth}
+                  className="btn-secondary"
+                  style={{ padding: '0.45rem 0.85rem', fontSize: '0.8rem' }}
+                  title="Admin login requires phone SMS verification"
                 >
-                  Admin Panel
+                  <Lock size={14} color="#a78bfa" /> Admin Login
                 </button>
               </div>
-            )}
+            ) : (
+              <>
+                {/* Admin Mode toggle — ADMIN ONLY */}
+                {isAuthorizedAdmin && (
+                  <div style={{ display: 'flex', background: 'rgba(0,0,0,0.3)', padding: '3px', borderRadius: '10px', border: '1px solid var(--border-subtle)' }}>
+                    <button
+                      onClick={() => onSwitchUser('worker')}
+                      style={{
+                        padding: '0.35rem 0.7rem',
+                        fontSize: '0.75rem',
+                        fontWeight: 600,
+                        borderRadius: '7px',
+                        border: 'none',
+                        cursor: 'pointer',
+                        background: currentUser.role === 'worker' ? 'var(--accent-cyan)' : 'transparent',
+                        color: currentUser.role === 'worker' ? '#0a0d14' : 'var(--text-muted)'
+                      }}
+                    >
+                      Worker Mode
+                    </button>
+                    <button
+                      onClick={() => onSwitchUser('admin')}
+                      style={{
+                        padding: '0.35rem 0.7rem',
+                        fontSize: '0.75rem',
+                        fontWeight: 600,
+                        borderRadius: '7px',
+                        border: 'none',
+                        cursor: 'pointer',
+                        background: currentUser.role === 'admin' ? 'var(--accent-violet)' : 'transparent',
+                        color: currentUser.role === 'admin' ? '#ffffff' : 'var(--text-muted)'
+                      }}
+                    >
+                      Admin Panel
+                    </button>
+                  </div>
+                )}
 
-            {/* Current user chip */}
-            {currentUser && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'rgba(255, 255, 255, 0.04)', padding: '0.35rem 0.65rem', borderRadius: '10px', border: '1px solid var(--border-subtle)' }}>
-                <div style={{ width: '26px', height: '26px', borderRadius: '50%', background: isAuthorizedAdmin ? 'var(--accent-violet)' : 'var(--accent-cyan)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  {isAuthorizedAdmin ? <ShieldCheck size={14} color="#fff" /> : <User size={14} color="#000" />}
-                </div>
-                <div style={{ textAlign: 'left', lineHeight: 1.2 }}>
-                  <div style={{ fontSize: '0.78rem', fontWeight: 600 }}>{currentUser.full_name}</div>
-                  <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>
-                    {isAuthorizedAdmin ? 'Administrator' : currentUser.email}
+                {/* Current user chip */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'rgba(255, 255, 255, 0.04)', padding: '0.35rem 0.65rem', borderRadius: '10px', border: '1px solid var(--border-subtle)' }}>
+                  <div style={{ width: '26px', height: '26px', borderRadius: '50%', background: isAuthorizedAdmin ? 'var(--accent-violet)' : 'var(--accent-cyan)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    {isAuthorizedAdmin ? <ShieldCheck size={14} color="#fff" /> : <User size={14} color="#000" />}
+                  </div>
+                  <div style={{ textAlign: 'left', lineHeight: 1.2 }}>
+                    <div style={{ fontSize: '0.78rem', fontWeight: 600 }}>{currentUser.full_name}</div>
+                    <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>
+                      {isAuthorizedAdmin ? 'Administrator' : currentUser.email}
+                    </div>
                   </div>
                 </div>
-              </div>
-            )}
 
-            {/* Register New Worker */}
-            {isAuthorizedAdmin && (
-              <button
-                onClick={() => onSwitchUser('new')}
-                className="btn-secondary"
-                style={{ padding: '0.45rem 0.7rem', borderRadius: '9px', fontSize: '0.78rem' }}
-                title="Register New Worker"
-              >
-                <Users size={15} />
-                <span>Register</span>
-              </button>
-            )}
+                {/* Register New Worker — ADMIN ONLY */}
+                {isAuthorizedAdmin && (
+                  <button
+                    onClick={() => onSwitchUser('new')}
+                    className="btn-secondary"
+                    style={{ padding: '0.45rem 0.7rem', borderRadius: '9px', fontSize: '0.78rem' }}
+                    title="Register New Worker"
+                  >
+                    <Users size={15} />
+                    <span>Register</span>
+                  </button>
+                )}
 
-            {/* Settings */}
-            {isAuthorizedAdmin && (
-              <button
-                onClick={onOpenSettings}
-                className="btn-secondary"
-                style={{ padding: '0.45rem 0.65rem', borderRadius: '9px' }}
-                title="System Settings"
-              >
-                <Settings size={15} />
-              </button>
-            )}
+                {/* Settings — ADMIN ONLY */}
+                {isAuthorizedAdmin && (
+                  <button
+                    onClick={onOpenSettings}
+                    className="btn-secondary"
+                    style={{ padding: '0.45rem 0.65rem', borderRadius: '9px' }}
+                    title="System Settings"
+                  >
+                    <Settings size={15} />
+                  </button>
+                )}
 
-            {/* Logout */}
-            <button
-              onClick={onLogout}
-              className="btn-secondary"
-              style={{ padding: '0.45rem 0.65rem', borderRadius: '9px' }}
-              title="Logout"
-            >
-              <LogOut size={15} />
-            </button>
+                {/* Logout */}
+                <button
+                  onClick={onLogout}
+                  className="btn-secondary"
+                  style={{ padding: '0.45rem 0.65rem', borderRadius: '9px' }}
+                  title="Logout"
+                >
+                  <LogOut size={15} />
+                </button>
+              </>
+            )}
           </div>
 
-          {/* Mobile Right Controls: Role Chip + Hamburger Toggle */}
+          {/* Mobile Right Controls */}
           <div className="show-on-mobile" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            {currentUser && (
+            {!currentUser ? (
+              <button
+                onClick={onOpenAuth}
+                className="btn-primary"
+                style={{ padding: '0.35rem 0.65rem', fontSize: '0.75rem', minHeight: 'auto' }}
+              >
+                <LogIn size={13} /> Sign In
+              </button>
+            ) : (
               <div style={{
                 fontSize: '0.72rem',
                 fontWeight: 700,
@@ -242,15 +279,17 @@ export const Navbar: React.FC<NavbarProps> = ({
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
                 <div style={{
                   width: '36px', height: '36px', borderRadius: '10px',
-                  background: isAuthorizedAdmin ? 'var(--accent-violet)' : 'var(--accent-cyan)',
+                  background: isAuthorizedAdmin ? 'var(--accent-violet)' : currentUser ? 'var(--accent-cyan)' : 'rgba(255,255,255,0.1)',
                   display: 'flex', alignItems: 'center', justifyContent: 'center'
                 }}>
-                  {isAuthorizedAdmin ? <ShieldCheck size={18} color="#fff" /> : <User size={18} color="#000" />}
+                  {isAuthorizedAdmin ? <ShieldCheck size={18} color="#fff" /> : currentUser ? <User size={18} color="#000" /> : <LogIn size={18} color="#fff" />}
                 </div>
                 <div>
-                  <div style={{ fontWeight: 700, fontSize: '0.9rem' }}>{currentUser?.full_name || 'Guest User'}</div>
+                  <div style={{ fontWeight: 700, fontSize: '0.9rem' }}>
+                    {currentUser?.full_name || 'Guest Visitor'}
+                  </div>
                   <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
-                    {isAuthorizedAdmin ? 'Administrator' : currentUser?.phone_number || currentUser?.email}
+                    {isAuthorizedAdmin ? 'Administrator' : currentUser ? currentUser.email : 'Not signed in'}
                   </div>
                 </div>
               </div>
@@ -262,107 +301,139 @@ export const Navbar: React.FC<NavbarProps> = ({
               </button>
             </div>
 
-            {/* Role Mode Switcher (Admin Only) */}
-            {isAuthorizedAdmin && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+            {/* If NOT logged in: Direct Login options */}
+            {!currentUser ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                 <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase' }}>
-                  Switch Workspace
+                  Account Access
                 </span>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.4rem', background: 'rgba(0,0,0,0.3)', padding: '4px', borderRadius: '10px', border: '1px solid var(--border-subtle)' }}>
-                  <button
-                    onClick={() => { onSwitchUser('worker'); setIsMobileMenuOpen(false); }}
-                    style={{
-                      padding: '0.55rem',
-                      fontSize: '0.78rem',
-                      fontWeight: 600,
-                      borderRadius: '8px',
-                      border: 'none',
-                      cursor: 'pointer',
-                      background: currentUser?.role === 'worker' ? 'var(--accent-cyan)' : 'transparent',
-                      color: currentUser?.role === 'worker' ? '#0a0d14' : 'var(--text-muted)'
-                    }}
-                  >
-                    Worker Mode
-                  </button>
-                  <button
-                    onClick={() => { onSwitchUser('admin'); setIsMobileMenuOpen(false); }}
-                    style={{
-                      padding: '0.55rem',
-                      fontSize: '0.78rem',
-                      fontWeight: 600,
-                      borderRadius: '8px',
-                      border: 'none',
-                      cursor: 'pointer',
-                      background: currentUser?.role === 'admin' ? 'var(--accent-violet)' : 'transparent',
-                      color: currentUser?.role === 'admin' ? '#ffffff' : 'var(--text-muted)'
-                    }}
-                  >
-                    Admin Panel
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* Quick Actions List */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
-              <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase' }}>
-                Navigation &amp; Actions
-              </span>
-
-              {isAuthorizedAdmin && (
                 <button
-                  onClick={() => { onSwitchUser('new'); setIsMobileMenuOpen(false); }}
+                  onClick={() => { onOpenAuth(); setIsMobileMenuOpen(false); }}
                   className="btn-primary"
                   style={{ width: '100%', justifyContent: 'flex-start', fontSize: '0.85rem' }}
                 >
-                  <Users size={16} /> Register New Worker
+                  <LogIn size={16} /> Worker Sign In
                 </button>
-              )}
-
-              {isAuthorizedAdmin && (
                 <button
-                  onClick={() => { onOpenSettings(); setIsMobileMenuOpen(false); }}
+                  onClick={() => { onOpenAuth(); setIsMobileMenuOpen(false); }}
                   className="btn-secondary"
                   style={{ width: '100%', justifyContent: 'flex-start', fontSize: '0.85rem' }}
                 >
-                  <Settings size={16} /> System &amp; API Settings
+                  <UserPlus size={16} /> Register as New Worker
                 </button>
-              )}
-
-              <button
-                onClick={() => { onLogout(); setIsMobileMenuOpen(false); }}
-                className="btn-secondary"
-                style={{ width: '100%', justifyContent: 'flex-start', fontSize: '0.85rem', color: '#fb7185' }}
-              >
-                <LogOut size={16} /> Sign Out
-              </button>
-            </div>
-
-            {/* Live System Gateways Status */}
-            {isAuthorizedAdmin && (
-              <div style={{ marginTop: 'auto', borderTop: '1px solid var(--border-subtle)', paddingTop: '1rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase' }}>
-                  System Health
-                </span>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.75rem', color: '#10b981' }}>
-                  <span style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                    <Zap size={13} /> Upstash Redis
-                  </span>
-                  <span className="badge badge-approved" style={{ fontSize: '0.65rem' }}>Connected</span>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.75rem', color: '#38bdf8' }}>
-                  <span style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                    <MessageSquare size={13} /> TextSMS Kenya
-                  </span>
-                  <span className="badge" style={{ fontSize: '0.65rem', background: 'rgba(56, 189, 248, 0.15)', color: '#38bdf8' }}>Ready</span>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.75rem', color: '#c4b5fd' }}>
-                  <span style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                    <ShieldCheck size={13} /> Supabase DB
-                  </span>
-                  <span className="badge" style={{ fontSize: '0.65rem', background: 'rgba(139, 92, 246, 0.15)', color: '#c4b5fd' }}>Active</span>
-                </div>
+                <button
+                  onClick={() => { onOpenAuth(); setIsMobileMenuOpen(false); }}
+                  className="btn-secondary"
+                  style={{ width: '100%', justifyContent: 'flex-start', fontSize: '0.85rem', borderColor: 'rgba(139, 92, 246, 0.3)' }}
+                >
+                  <Lock size={16} color="#c4b5fd" /> Administrator Portal Sign In
+                </button>
               </div>
+            ) : (
+              <>
+                {/* Role Mode Switcher (ADMIN ONLY) */}
+                {isAuthorizedAdmin && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                    <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase' }}>
+                      Switch Workspace
+                    </span>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.4rem', background: 'rgba(0,0,0,0.3)', padding: '4px', borderRadius: '10px', border: '1px solid var(--border-subtle)' }}>
+                      <button
+                        onClick={() => { onSwitchUser('worker'); setIsMobileMenuOpen(false); }}
+                        style={{
+                          padding: '0.55rem',
+                          fontSize: '0.78rem',
+                          fontWeight: 600,
+                          borderRadius: '8px',
+                          border: 'none',
+                          cursor: 'pointer',
+                          background: currentUser.role === 'worker' ? 'var(--accent-cyan)' : 'transparent',
+                          color: currentUser.role === 'worker' ? '#0a0d14' : 'var(--text-muted)'
+                        }}
+                      >
+                        Worker Mode
+                      </button>
+                      <button
+                        onClick={() => { onSwitchUser('admin'); setIsMobileMenuOpen(false); }}
+                        style={{
+                          padding: '0.55rem',
+                          fontSize: '0.78rem',
+                          fontWeight: 600,
+                          borderRadius: '8px',
+                          border: 'none',
+                          cursor: 'pointer',
+                          background: currentUser.role === 'admin' ? 'var(--accent-violet)' : 'transparent',
+                          color: currentUser.role === 'admin' ? '#ffffff' : 'var(--text-muted)'
+                        }}
+                      >
+                        Admin Panel
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Quick Actions List */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
+                  <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase' }}>
+                    Navigation &amp; Actions
+                  </span>
+
+                  {isAuthorizedAdmin && (
+                    <button
+                      onClick={() => { onSwitchUser('new'); setIsMobileMenuOpen(false); }}
+                      className="btn-primary"
+                      style={{ width: '100%', justifyContent: 'flex-start', fontSize: '0.85rem' }}
+                    >
+                      <Users size={16} /> Register New Worker
+                    </button>
+                  )}
+
+                  {isAuthorizedAdmin && (
+                    <button
+                      onClick={() => { onOpenSettings(); setIsMobileMenuOpen(false); }}
+                      className="btn-secondary"
+                      style={{ width: '100%', justifyContent: 'flex-start', fontSize: '0.85rem' }}
+                    >
+                      <Settings size={16} /> System &amp; API Settings
+                    </button>
+                  )}
+
+                  <button
+                    onClick={() => { onLogout(); setIsMobileMenuOpen(false); }}
+                    className="btn-secondary"
+                    style={{ width: '100%', justifyContent: 'flex-start', fontSize: '0.85rem', color: '#fb7185' }}
+                  >
+                    <LogOut size={16} /> Sign Out
+                  </button>
+                </div>
+
+                {/* Live System Gateways Status (ADMIN ONLY) */}
+                {isAuthorizedAdmin && (
+                  <div style={{ marginTop: 'auto', borderTop: '1px solid var(--border-subtle)', paddingTop: '1rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                    <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase' }}>
+                      System Health
+                    </span>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.75rem', color: '#10b981' }}>
+                      <span style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                        <Zap size={13} /> Upstash Redis
+                      </span>
+                      <span className="badge badge-approved" style={{ fontSize: '0.65rem' }}>Connected</span>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.75rem', color: '#38bdf8' }}>
+                      <span style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                        <MessageSquare size={13} /> TextSMS Kenya
+                      </span>
+                      <span className="badge" style={{ fontSize: '0.65rem', background: 'rgba(56, 189, 248, 0.15)', color: '#38bdf8' }}>Ready</span>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.75rem', color: '#c4b5fd' }}>
+                      <span style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                        <ShieldCheck size={13} /> Supabase DB
+                      </span>
+                      <span className="badge" style={{ fontSize: '0.65rem', background: 'rgba(139, 92, 246, 0.15)', color: '#c4b5fd' }}>Active</span>
+                    </div>
+                  </div>
+                )}
+              </>
             )}
 
           </div>

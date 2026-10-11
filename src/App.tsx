@@ -24,7 +24,7 @@ export function App() {
     await DataService.init();
     const loadedWorkers = await DataService.getWorkers();
     const loadedSubmissions = await DataService.getSubmissions();
-    const active = DataService.getCurrentUser() || loadedWorkers[0];
+    const active = DataService.getCurrentUser(); // No auto-login fallback for strangers
     
     setWorkers(loadedWorkers);
     setSubmissions(loadedSubmissions);
@@ -50,25 +50,26 @@ export function App() {
 
   const handleSwitchUser = (target: 'worker' | 'admin' | 'new') => {
     if (target === 'new') {
+      if (!currentUser || currentUser.email.toLowerCase() !== ADMIN_EMAIL.toLowerCase()) {
+        showToast('Admin access required to register workers.');
+        setIsAuthOpen(true);
+        return;
+      }
       setIsAuthOpen(true);
       return;
     }
 
     if (target === 'admin') {
       if (!currentUser || currentUser.email.toLowerCase() !== ADMIN_EMAIL.toLowerCase()) {
-        showToast('Access Denied: Only user with email sammyseth260@gmail.com can access the admin panel.');
+        showToast('Administrative task restricted: You must be logged in as Administrator (sammyseth260@gmail.com).');
+        setIsAuthOpen(true);
         return;
       }
       setCurrentRoleView('admin');
       showToast('Switched to Administrator Control Hub');
     } else {
       setCurrentRoleView('worker');
-      const firstWorker = workers.find(w => w.role === 'worker') || workers[0];
-      if (firstWorker) {
-        setCurrentUser(firstWorker);
-        DataService.setCurrentUser(firstWorker);
-        showToast(`Switched to Worker: ${firstWorker.full_name}`);
-      }
+      showToast('Switched to Worker Dashboard');
     }
   };
 
@@ -77,12 +78,21 @@ export function App() {
       {/* Top Navbar */}
       <Navbar
         currentUser={currentUser}
-        onOpenSettings={() => setIsSettingsOpen(true)}
+        onOpenSettings={() => {
+          if (!currentUser || currentUser.email.toLowerCase() !== ADMIN_EMAIL.toLowerCase()) {
+            showToast('Admin credentials required to view settings.');
+            setIsAuthOpen(true);
+            return;
+          }
+          setIsSettingsOpen(true);
+        }}
         onSwitchUser={handleSwitchUser}
+        onOpenAuth={() => setIsAuthOpen(true)}
         onLogout={() => {
           DataService.setCurrentUser(null);
           setCurrentUser(null);
-          setIsAuthOpen(true);
+          setCurrentRoleView('worker');
+          showToast('You have been signed out.');
         }}
       />
 
@@ -96,14 +106,15 @@ export function App() {
             onRefresh={loadData}
             onShowToast={showToast}
           />
-        ) : currentUser ? (
+        ) : (
           <WorkerView
             worker={currentUser}
             submissions={submissions}
             onRefresh={loadData}
             onShowToast={showToast}
+            onOpenAuth={() => setIsAuthOpen(true)}
           />
-        ) : null}
+        )}
       </main>
 
       {/* Footer Info */}

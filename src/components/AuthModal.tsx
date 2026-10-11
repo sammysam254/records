@@ -381,6 +381,29 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               <LogIn size={18} />
               {isSubmitting ? 'Authenticating...' : 'Continue'}
             </button>
+
+            <div style={{ textAlign: 'center', paddingTop: '0.5rem', borderTop: '1px solid var(--border-subtle)' }}>
+              <button
+                type="button"
+                onClick={() => {
+                  setLoginEmail(ADMIN_EMAIL);
+                  setPendingAdminLogin(true);
+                }}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: 'var(--accent-violet)',
+                  cursor: 'pointer',
+                  fontSize: '0.8rem',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '0.4rem',
+                  fontWeight: 600
+                }}
+              >
+                <ShieldCheck size={14} /> Administrator Portal Sign In (SMS OTP)
+              </button>
+            </div>
           </form>
         )}
 

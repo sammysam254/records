@@ -14,30 +14,35 @@ import {
   CheckCircle2, 
   Smartphone,
   Info,
-  DollarSign
+  DollarSign,
+  LogIn,
+  UserPlus,
+  Lock
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
 interface WorkerViewProps {
-  worker: UserProfile;
+  worker: UserProfile | null;
   submissions: WeeklySubmission[];
   onRefresh: () => void;
   onShowToast: (message: string) => void;
+  onOpenAuth: () => void;
 }
 
 export const WorkerView: React.FC<WorkerViewProps> = ({
   worker,
   submissions,
   onRefresh,
-  onShowToast
+  onShowToast,
+  onOpenAuth
 }) => {
   const [amountInput, setAmountInput] = useState<string>('');
   const [showPin, setShowPin] = useState(false);
   const [copiedPin, setCopiedPin] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Filter submissions for this worker
-  const mySubmissions = submissions.filter(s => s.user_id === worker.id);
+  // Filter submissions for this worker (or empty if visitor)
+  const mySubmissions = worker ? submissions.filter(s => s.user_id === worker.id) : [];
 
   // Parse numeric amount
   const numericAmount = parseFloat(amountInput) || 0;
@@ -45,6 +50,11 @@ export const WorkerView: React.FC<WorkerViewProps> = ({
 
   // Copy PIN helper
   const handleCopyPin = () => {
+    if (!worker) {
+      onShowToast('Please sign in to view and copy your assigned PIN.');
+      onOpenAuth();
+      return;
+    }
     navigator.clipboard.writeText(worker.device_pin);
     setCopiedPin(true);
     setTimeout(() => setCopiedPin(false), 2000);
@@ -53,6 +63,11 @@ export const WorkerView: React.FC<WorkerViewProps> = ({
 
   // Open Assigned Device URL in a new tab
   const handleOpenDevice = () => {
+    if (!worker) {
+      onShowToast('Please sign in to access your assigned workstation device.');
+      onOpenAuth();
+      return;
+    }
     let url = worker.device_url.trim();
     if (!url.startsWith('http://') && !url.startsWith('https://')) {
       url = 'https://' + url;
@@ -64,6 +79,13 @@ export const WorkerView: React.FC<WorkerViewProps> = ({
   // Submit Saturday earnings
   const handleSubmitEarnings = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (!worker) {
+      onShowToast('You must be signed in to submit weekly earnings. Opening sign-in...');
+      onOpenAuth();
+      return;
+    }
+
     if (numericAmount <= 0) {
       alert('Please enter a valid weekly earnings amount greater than 0.');
       return;
@@ -97,7 +119,61 @@ export const WorkerView: React.FC<WorkerViewProps> = ({
   return (
     <div className="page-container">
       
-      {/* Saturday Reminder Banner (Responsive Flex Stack) */}
+      {/* Guest Mode Banner (Shown when not logged in) */}
+      {!worker && (
+        <div className="glass-panel" style={{
+          background: 'linear-gradient(135deg, rgba(6, 182, 212, 0.12) 0%, rgba(139, 92, 246, 0.12) 100%)',
+          borderColor: 'rgba(56, 189, 248, 0.3)',
+          padding: '1.25rem 1.5rem',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: '1rem'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+            <div style={{
+              background: 'var(--gradient-brand)',
+              width: '42px',
+              height: '42px',
+              borderRadius: '12px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexShrink: 0
+            }}>
+              <LogIn size={20} color="#fff" />
+            </div>
+            <div>
+              <div style={{ fontWeight: 800, fontSize: '1.05rem', color: '#f8fafc' }}>
+                Worker Dashboard (Guest Preview Mode)
+              </div>
+              <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>
+                You are currently not logged in. Sign in to your account to view your live wallet balance, access your assigned device workstation &amp; PIN, and submit weekly earnings.
+              </p>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+            <button
+              onClick={onOpenAuth}
+              className="btn-primary"
+              style={{ fontSize: '0.85rem' }}
+            >
+              <LogIn size={15} /> Worker Sign In
+            </button>
+            <button
+              onClick={onOpenAuth}
+              className="btn-secondary"
+              style={{ fontSize: '0.85rem' }}
+            >
+              <UserPlus size={15} /> Register Account
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Saturday Reminder Banner */}
       <div className="glass-panel" style={{
         background: isSaturday 
           ? 'linear-gradient(90deg, rgba(16, 185, 129, 0.15), rgba(6, 182, 212, 0.15))' 
@@ -158,11 +234,19 @@ export const WorkerView: React.FC<WorkerViewProps> = ({
               <div style={{ background: 'rgba(6, 182, 212, 0.2)', padding: '0.45rem', borderRadius: '10px' }}>
                 <Wallet size={18} color="#06b6d4" />
               </div>
-              <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-muted)' }}>My Wallet</span>
+              <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-muted)' }}>
+                {worker ? 'My Worker Wallet' : 'Worker Wallet (Preview)'}
+              </span>
             </div>
-            <span className="badge badge-approved" style={{ fontSize: '0.68rem' }}>
-              <CheckCircle2 size={12} /> Phone Verified
-            </span>
+            {worker ? (
+              <span className="badge badge-approved" style={{ fontSize: '0.68rem' }}>
+                <CheckCircle2 size={12} /> Phone Verified
+              </span>
+            ) : (
+              <span className="badge" style={{ background: 'rgba(255,255,255,0.06)', color: 'var(--text-dim)', fontSize: '0.68rem' }}>
+                Not Logged In
+              </span>
+            )}
           </div>
 
           <div style={{ marginBottom: '0.5rem' }}>
@@ -171,20 +255,32 @@ export const WorkerView: React.FC<WorkerViewProps> = ({
             </span>
             <div style={{ fontSize: '2.4rem', fontWeight: 800, color: '#f8fafc', letterSpacing: '-0.02em', display: 'flex', alignItems: 'baseline', gap: '0.35rem' }}>
               <span style={{ fontSize: '1.4rem', color: 'var(--accent-cyan)' }}>$</span>
-              {worker.wallet_balance.toFixed(2)}
+              {worker ? worker.wallet_balance.toFixed(2) : '0.00'}
             </div>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '1rem', paddingTop: '0.85rem', borderTop: '1px solid var(--border-subtle)', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-            <div>
-              <strong style={{ color: '#f8fafc' }}>{worker.full_name}</strong>
-              <div style={{ fontSize: '0.72rem', color: 'var(--text-dim)' }}>{worker.phone_number}</div>
+          {worker ? (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '1rem', paddingTop: '0.85rem', borderTop: '1px solid var(--border-subtle)', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+              <div>
+                <strong style={{ color: '#f8fafc' }}>{worker.full_name}</strong>
+                <div style={{ fontSize: '0.72rem', color: 'var(--text-dim)' }}>{worker.phone_number}</div>
+              </div>
+              <div style={{ textAlign: 'right' }}>
+                <div>{mySubmissions.length} Submissions</div>
+                <div style={{ fontSize: '0.72rem', color: 'var(--accent-emerald)' }}>Active Account</div>
+              </div>
             </div>
-            <div style={{ textAlign: 'right' }}>
-              <div>{mySubmissions.length} Submissions</div>
-              <div style={{ fontSize: '0.72rem', color: 'var(--accent-emerald)' }}>Active Account</div>
+          ) : (
+            <div style={{ marginTop: '0.85rem', paddingTop: '0.85rem', borderTop: '1px solid var(--border-subtle)' }}>
+              <button
+                onClick={onOpenAuth}
+                className="btn-primary"
+                style={{ width: '100%', justifyContent: 'center', fontSize: '0.82rem', padding: '0.6rem' }}
+              >
+                <LogIn size={14} /> Sign In to View Your Balance
+              </button>
             </div>
-          </div>
+          )}
         </div>
 
         {/* Assigned Device & PIN Card */}
@@ -194,79 +290,100 @@ export const WorkerView: React.FC<WorkerViewProps> = ({
               <div style={{ background: 'rgba(139, 92, 246, 0.2)', padding: '0.45rem', borderRadius: '10px' }}>
                 <Smartphone size={18} color="#a78bfa" />
               </div>
-              <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-muted)' }}>Assigned Device Workstation</span>
+              <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-muted)' }}>Assigned Workstation</span>
             </div>
             <span className="badge" style={{ background: 'rgba(139, 92, 246, 0.15)', color: '#c4b5fd', fontSize: '0.68rem' }}>
               Workstation
             </span>
           </div>
 
-          {/* Assigned Device URL Box */}
-          <div style={{ marginBottom: '1rem' }}>
-            <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '0.35rem', textTransform: 'uppercase' }}>
-              Device URL
-            </label>
-            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-              <input
-                type="text"
-                readOnly
-                value={worker.device_url}
-                className="form-input"
-                style={{ flex: 1, minWidth: '180px', fontFamily: 'var(--font-mono)', fontSize: '0.82rem', color: '#38bdf8' }}
-              />
-              <button
-                type="button"
-                onClick={handleOpenDevice}
-                className="btn-primary"
-                style={{ whiteSpace: 'nowrap', fontSize: '0.82rem' }}
-                title="Launch assigned workstation"
-              >
-                <ExternalLink size={15} /> Open Device
-              </button>
-            </div>
-          </div>
-
-          {/* Assigned Device PIN Box */}
-          <div>
-            <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '0.35rem', textTransform: 'uppercase' }}>
-              Device PIN
-            </label>
-            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-              <div style={{
-                flex: 1,
-                background: 'rgba(10, 13, 20, 0.8)',
-                border: '1px solid var(--border-subtle)',
-                borderRadius: '10px',
-                padding: '0.6rem 0.85rem',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                fontFamily: 'var(--font-mono)',
-                fontSize: '1rem',
-                letterSpacing: showPin ? '0.2em' : '0.35em'
-              }}>
-                <span>{showPin ? worker.device_pin : '••••'}</span>
-                <button
-                  type="button"
-                  onClick={() => setShowPin(!showPin)}
-                  style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '0.72rem', padding: '0.2rem' }}
-                >
-                  {showPin ? 'Hide' : 'Show'}
-                </button>
+          {worker ? (
+            <>
+              {/* Assigned Device URL Box */}
+              <div style={{ marginBottom: '1rem' }}>
+                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '0.35rem', textTransform: 'uppercase' }}>
+                  Device URL
+                </label>
+                <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                  <input
+                    type="text"
+                    readOnly
+                    value={worker.device_url}
+                    className="form-input"
+                    style={{ flex: 1, minWidth: '180px', fontFamily: 'var(--font-mono)', fontSize: '0.82rem', color: '#38bdf8' }}
+                  />
+                  <button
+                    type="button"
+                    onClick={handleOpenDevice}
+                    className="btn-primary"
+                    style={{ whiteSpace: 'nowrap', fontSize: '0.82rem' }}
+                    title="Launch assigned workstation"
+                  >
+                    <ExternalLink size={15} /> Open Device
+                  </button>
+                </div>
               </div>
 
+              {/* Assigned Device PIN Box */}
+              <div>
+                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '0.35rem', textTransform: 'uppercase' }}>
+                  Device PIN
+                </label>
+                <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                  <div style={{
+                    flex: 1,
+                    background: 'rgba(10, 13, 20, 0.8)',
+                    border: '1px solid var(--border-subtle)',
+                    borderRadius: '10px',
+                    padding: '0.6rem 0.85rem',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    fontFamily: 'var(--font-mono)',
+                    fontSize: '1rem',
+                    letterSpacing: showPin ? '0.2em' : '0.35em'
+                  }}>
+                    <span>{showPin ? worker.device_pin : '••••'}</span>
+                    <button
+                      type="button"
+                      onClick={() => setShowPin(!showPin)}
+                      style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '0.72rem', padding: '0.2rem' }}
+                    >
+                      {showPin ? 'Hide' : 'Show'}
+                    </button>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleCopyPin}
+                    className="btn-secondary"
+                    style={{ padding: '0.6rem 0.85rem', whiteSpace: 'nowrap', fontSize: '0.82rem' }}
+                    title="Copy PIN"
+                  >
+                    {copiedPin ? <Check size={15} color="#10b981" /> : <Copy size={15} />}
+                    <span>{copiedPin ? 'Copied' : 'Copy'}</span>
+                  </button>
+                </div>
+              </div>
+            </>
+          ) : (
+            <div style={{ background: 'rgba(10, 13, 20, 0.6)', border: '1px solid var(--border-subtle)', borderRadius: '12px', padding: '1.25rem', textAlign: 'center' }}>
+              <Lock size={28} color="var(--accent-violet)" style={{ margin: '0 auto 0.5rem', opacity: 0.8 }} />
+              <div style={{ fontWeight: 700, fontSize: '0.9rem', color: '#f8fafc', marginBottom: '0.25rem' }}>
+                Workstation &amp; PIN Protected
+              </div>
+              <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: '1rem' }}>
+                Your workstation URL and 4-digit authentication PIN are securely linked to your account. Sign in to view and launch them.
+              </p>
               <button
-                type="button"
-                onClick={handleCopyPin}
+                onClick={onOpenAuth}
                 className="btn-secondary"
-                style={{ padding: '0.6rem 0.85rem', whiteSpace: 'nowrap', fontSize: '0.82rem' }}
-                title="Copy PIN"
+                style={{ fontSize: '0.82rem', width: '100%', justifyContent: 'center' }}
               >
-                {copiedPin ? <Check size={15} color="#10b981" /> : <Copy size={15} />}
-                <span>{copiedPin ? 'Copied' : 'Copy'}</span>
+                <LogIn size={14} /> Sign In to Access Workstation
               </button>
             </div>
-          </div>
+          )}
         </div>
 
       </div>
@@ -344,10 +461,16 @@ export const WorkerView: React.FC<WorkerViewProps> = ({
                 style={{ width: '100%', marginTop: '1.25rem', padding: '0.85rem', justifyContent: 'center', fontSize: '0.95rem' }}
               >
                 <Send size={16} />
-                {isSubmitting ? 'Submitting & Dispatching SMS...' : `Submit $${numericAmount.toFixed(2)} for Approval`}
+                {isSubmitting 
+                  ? 'Submitting & Dispatching SMS...' 
+                  : worker 
+                    ? `Submit $${numericAmount.toFixed(2)} for Approval`
+                    : `Sign In to Submit $${numericAmount.toFixed(2)}`}
               </button>
               <p style={{ fontSize: '0.72rem', color: 'var(--text-dim)', textAlign: 'center', marginTop: '0.4rem' }}>
-                You will receive an SMS confirmation on your phone once submitted.
+                {worker 
+                  ? 'You will receive an SMS confirmation on your phone once submitted.' 
+                  : 'Guests can preview credit calculations. Sign in required to finalize submission.'}
               </p>
             </div>
 
@@ -446,12 +569,33 @@ export const WorkerView: React.FC<WorkerViewProps> = ({
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.25rem' }}>
           <div>
             <h3 style={{ fontSize: '1.2rem', fontWeight: 800 }}>My Weekly Submissions</h3>
-            <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>Records of your submitted earnings, approval status, and credited amounts.</p>
+            <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+              {worker 
+                ? 'Records of your submitted earnings, approval status, and credited amounts.' 
+                : 'Sign in to access your weekly records and payment disbursement history.'}
+            </p>
           </div>
-          <span className="badge badge-paid" style={{ fontSize: '0.68rem' }}>{mySubmissions.length} Records</span>
+          {worker && (
+            <span className="badge badge-paid" style={{ fontSize: '0.68rem' }}>{mySubmissions.length} Records</span>
+          )}
         </div>
 
-        {mySubmissions.length === 0 ? (
+        {!worker ? (
+          <div style={{ textAlign: 'center', padding: '2.5rem 1rem', color: 'var(--text-dim)' }}>
+            <Lock size={34} style={{ margin: '0 auto 0.75rem', opacity: 0.5, color: 'var(--accent-cyan)' }} />
+            <p style={{ fontWeight: 600, color: '#f8fafc', marginBottom: '0.25rem' }}>Sign in to view your submission records</p>
+            <p style={{ fontSize: '0.8rem', maxWidth: '380px', margin: '0 auto 1rem' }}>
+              Your weekly submissions, approval statuses, and payout receipts are protected under your worker profile.
+            </p>
+            <button
+              onClick={onOpenAuth}
+              className="btn-secondary"
+              style={{ fontSize: '0.82rem' }}
+            >
+              <LogIn size={14} /> Worker Sign In
+            </button>
+          </div>
+        ) : mySubmissions.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '3rem 1rem', color: 'var(--text-dim)' }}>
             <Clock size={36} style={{ margin: '0 auto 0.75rem', opacity: 0.5 }} />
             <p>No earnings submitted yet. Use the form above to submit your Saturday earnings.</p>
