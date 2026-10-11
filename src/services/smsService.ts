@@ -19,15 +19,37 @@ export interface SendSMSResult {
 
 // Clean and format mobile number to Kenyan international format e.g. 2547XXXXXXXX
 export function formatKenyanPhone(phone: string): string {
-  let cleaned = phone.replace(/\D/g, '');
-  if (cleaned.startsWith('0')) {
-    cleaned = '254' + cleaned.substring(1);
-  } else if (cleaned.startsWith('254')) {
-    // already starts with 254
-  } else if (cleaned.length === 9) {
-    cleaned = '254' + cleaned;
+  // Strip all non-digits and leading +
+  let cleaned = phone.replace(/[^\d]/g, '');
+
+  // Handle +254... → already full international
+  if (cleaned.startsWith('254') && cleaned.length === 12) {
+    return cleaned; // e.g. 254706499848
   }
+
+  // Handle 0XXXXXXXXX (10 digits starting with 0) e.g. 0706499848
+  if (cleaned.startsWith('0') && cleaned.length === 10) {
+    return '254' + cleaned.substring(1); // → 254706499848
+  }
+
+  // Handle 7XXXXXXXX or 1XXXXXXXX (9 digits, local without leading 0)
+  if ((cleaned.startsWith('7') || cleaned.startsWith('1')) && cleaned.length === 9) {
+    return '254' + cleaned; // → 254706499848
+  }
+
+  // Handle cases where user typed partial international without + e.g. 254706499848 already 12 digits
+  if (cleaned.length === 12 && cleaned.startsWith('254')) {
+    return cleaned;
+  }
+
+  // Return as-is and let validation catch it
   return cleaned;
+}
+
+// Validates that a number is a proper Kenyan international format (254XXXXXXXXX = 12 digits)
+export function isValidKenyanPhone(phone: string): boolean {
+  const formatted = formatKenyanPhone(phone);
+  return /^254[17]\d{8}$/.test(formatted);
 }
 
 // Template generators ensuring every message begins with "Hello {FullName}" and uses Dollar ($)

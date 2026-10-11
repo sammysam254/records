@@ -1,7 +1,7 @@
 import type { Context } from "@netlify/functions";
 
 export default async (req: Request, context: Context) => {
-  // CORS preflight response
+  // CORS preflight
   if (req.method === "OPTIONS") {
     return new Response(null, {
       status: 204,
@@ -23,21 +23,21 @@ export default async (req: Request, context: Context) => {
   try {
     const body = await req.json();
 
-    // API key is required — partner ID is optional (TextSMS uses a default if omitted)
+    // API Key — required
     const apiKey =
       process.env.TEXTSMS_API_KEY ||
       process.env.VITE_TEXTSMS_API_KEY ||
       body.apikey ||
       "";
 
-    // Partner ID is optional — TextSMS Kenya allows sending without it when using the default shortcode
+    // Partner ID — required by TextSMS Kenya (hardcoded fallback: 16450)
     const partnerId =
       process.env.TEXTSMS_PARTNER_ID ||
       process.env.VITE_TEXTSMS_PARTNER_ID ||
       body.partnerID ||
-      "";
+      "16450"; // default partner ID
 
-    // Shortcode — use "TextSMS" as the universal default
+    // Shortcode — "TextSMS" is the default sender ID
     const shortcode =
       process.env.TEXTSMS_SHORTCODE ||
       process.env.VITE_TEXTSMS_SHORTCODE ||
@@ -47,33 +47,40 @@ export default async (req: Request, context: Context) => {
     const mobile = body.mobile;
     const message = body.message;
 
+    // Validate required fields
     if (!apiKey) {
       return new Response(
-        JSON.stringify({ error: "Missing TextSMS API Key (TEXTSMS_API_KEY)" }),
+        JSON.stringify({ error: "Missing TEXTSMS_API_KEY in Netlify environment variables." }),
+        { status: 400, headers: { "Content-Type": "application/json" } }
+      );
+    }
+
+    if (!partnerId) {
+      return new Response(
+        JSON.stringify({
+          error:
+            "Missing TEXTSMS_PARTNER_ID. Log in to https://sms.textsms.co.ke, click 'GET API KEY & PARTNER ID', copy your numeric Partner ID, then set TEXTSMS_PARTNER_ID in Netlify → Site Settings → Environment Variables.",
+        }),
         { status: 400, headers: { "Content-Type": "application/json" } }
       );
     }
 
     if (!mobile || !message) {
       return new Response(
-        JSON.stringify({ error: "Missing required mobile number or message" }),
+        JSON.stringify({ error: "Missing required mobile or message field." }),
         { status: 400, headers: { "Content-Type": "application/json" } }
       );
     }
 
-    // Build payload — only include partnerID if it was provided
-    const payload: Record<string, string> = {
+    const payload = {
       apikey: apiKey,
+      partnerID: partnerId,
       message: message,
       shortcode: shortcode,
       mobile: mobile,
     };
 
-    if (partnerId) {
-      payload.partnerID = partnerId;
-    }
-
-    console.log(`Sending real SMS to ${mobile} via TextSMS Kenya (shortcode: ${shortcode})...`);
+    console.log(`[TextSMS] Sending to ${mobile} | shortcode: ${shortcode}`);
 
     const textSmsResp = await fetch("https://sms.textsms.co.ke/api/services/sendsms/", {
       method: "POST",
@@ -82,7 +89,7 @@ export default async (req: Request, context: Context) => {
     });
 
     const result = await textSmsResp.json();
-    console.log("TextSMS Gateway response:", JSON.stringify(result));
+    console.log("[TextSMS] Response:", JSON.stringify(result));
 
     return new Response(JSON.stringify(result), {
       status: 200,
@@ -92,11 +99,9 @@ export default async (req: Request, context: Context) => {
       },
     });
   } catch (error: any) {
-    console.error("TextSMS gateway error:", error);
+    console.error("[TextSMS] Gateway error:", error);
     return new Response(
-      JSON.stringify({
-        error: error.message || "Failed to communicate with TextSMS Kenya gateway",
-      }),
+      JSON.stringify({ error: error.message || "Failed to reach TextSMS Kenya gateway" }),
       {
         status: 500,
         headers: { "Content-Type": "application/json" },

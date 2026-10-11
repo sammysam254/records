@@ -1,6 +1,6 @@
 import type { UserProfile, WeeklySubmission } from '../types';
 import { calculateWalletCredit } from '../utils/calculator';
-import { SMSService, SMSTemplates, formatKenyanPhone } from './smsService';
+import { SMSService, SMSTemplates, formatKenyanPhone, isValidKenyanPhone } from './smsService';
 import { RedisService } from './redisService';
 import { getSupabase } from './supabaseClient';
 
@@ -153,8 +153,13 @@ export class DataService {
   // Send Registration SMS OTP (Real TextSMS dispatch, code is NOT returned)
   public static async sendRegistrationOTP(phoneNumber: string, fullName: string): Promise<{ success: boolean; message: string }> {
     const formatted = formatKenyanPhone(phoneNumber);
-    if (formatted.length < 10) {
-      return { success: false, message: 'Invalid phone number format. Please enter a valid 10-digit number.' };
+    
+    // Validate format before hitting the API
+    if (!isValidKenyanPhone(phoneNumber)) {
+      return { 
+        success: false, 
+        message: `Invalid phone number: "${phoneNumber}". Please enter a valid Kenyan number like 0706499848 or 254706499848.` 
+      };
     }
 
     // Generate 6-digit random code
