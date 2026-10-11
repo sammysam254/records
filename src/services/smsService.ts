@@ -48,11 +48,9 @@ export const SMSTemplates = {
     `Hello ${fullName}, it's Saturday! This is a reminder to submit your weekly earnings through your dashboard.`
 };
 
-const DEFAULT_TEXTSMS_API_KEY = 'eebf1d2e1d9df231eec7e63687dc1975';
-
 export class SMSService {
   private static getStoredConfig() {
-    const apiKey = localStorage.getItem('textsms_apikey') || import.meta.env.VITE_TEXTSMS_API_KEY || DEFAULT_TEXTSMS_API_KEY;
+    const apiKey = localStorage.getItem('textsms_apikey') || import.meta.env.VITE_TEXTSMS_API_KEY || '';
     const partnerId = localStorage.getItem('textsms_partnerid') || import.meta.env.VITE_TEXTSMS_PARTNER_ID || '';
     const shortcode = localStorage.getItem('textsms_shortcode') || import.meta.env.VITE_TEXTSMS_SHORTCODE || 'TextSMS';
     return { apiKey, partnerId, shortcode };
@@ -148,7 +146,7 @@ export class SMSService {
     }
 
     // Dispatched with API key (or simulated if in browser without CORS proxy)
-    const log = this.recordLog(params, formattedMobile, finalMessage, 200, `SMS queued with API Key ${apiKey.slice(0, 6)}... to ${formattedMobile}`);
+    const log = this.recordLog(params, formattedMobile, finalMessage, 200, `SMS queued to ${formattedMobile}`);
     return {
       success: true,
       messageId: 'SMS-' + Date.now(),

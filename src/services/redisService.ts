@@ -2,15 +2,16 @@ import type { UserProfile, WeeklySubmission } from '../types';
 
 /**
  * Upstash Redis High-Speed Caching Layer
- * Hardcoded with the user's Upstash Redis instance for blazing fast response times
+ * Reads configuration from Netlify Environment Variables or local runtime storage
  */
-const DEFAULT_UPSTASH_URL = 'https://destined-spider-220274.upstash.io';
-const DEFAULT_UPSTASH_TOKEN = 'gQAAAAAAA1xyAAIgcDJmNjlhM2M2NWU3ZTc0NTg2OTNjNmY1MjFiMWYxZGQ4ZQ';
-
 export class RedisService {
   private static getCredentials() {
-    const url = localStorage.getItem('upstash_redis_url') || import.meta.env.VITE_UPSTASH_REDIS_REST_URL || DEFAULT_UPSTASH_URL;
-    const token = localStorage.getItem('upstash_redis_token') || import.meta.env.VITE_UPSTASH_REDIS_REST_TOKEN || DEFAULT_UPSTASH_TOKEN;
+    const url = localStorage.getItem('upstash_redis_url') || 
+                import.meta.env.VITE_UPSTASH_REDIS_REST_URL || 
+                '';
+    const token = localStorage.getItem('upstash_redis_token') || 
+                  import.meta.env.VITE_UPSTASH_REDIS_REST_TOKEN || 
+                  '';
     return { url, token };
   }
 
