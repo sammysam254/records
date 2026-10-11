@@ -51,6 +51,7 @@ export const SMSTemplates = {
 export class SMSService {
   public static getStoredConfig() {
     const apiKey = localStorage.getItem('textsms_apikey') || import.meta.env.VITE_TEXTSMS_API_KEY || '';
+    // partnerID is optional — TextSMS Kenya works with just the API key + default shortcode
     const partnerId = localStorage.getItem('textsms_partnerid') || import.meta.env.VITE_TEXTSMS_PARTNER_ID || '';
     const shortcode = localStorage.getItem('textsms_shortcode') || import.meta.env.VITE_TEXTSMS_SHORTCODE || 'TextSMS';
     return { apiKey, partnerId, shortcode };
@@ -66,18 +67,21 @@ export class SMSService {
       finalMessage = `Hello ${params.recipientName}, ${finalMessage}`;
     }
 
+    // Build payload — partnerID is optional
+    const smsPayload: Record<string, string> = {
+      mobile: formattedMobile,
+      message: finalMessage,
+      apikey: apiKey,
+      shortcode: shortcode
+    };
+    if (partnerId) smsPayload.partnerID = partnerId;
+
     // Try Netlify serverless function first (handles TextSMS API server-side)
     try {
       const netlifyResp = await fetch('/.netlify/functions/send-sms', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          mobile: formattedMobile,
-          message: finalMessage,
-          apikey: apiKey,
-          partnerID: partnerId,
-          shortcode: shortcode
-        })
+        body: JSON.stringify(smsPayload)
       });
 
       const data = await netlifyResp.json();

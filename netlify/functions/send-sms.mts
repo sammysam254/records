@@ -22,24 +22,34 @@ export default async (req: Request, context: Context) => {
 
   try {
     const body = await req.json();
-    const apiKey = process.env.TEXTSMS_API_KEY || process.env.VITE_TEXTSMS_API_KEY || body.apikey || "";
-    const partnerId = process.env.TEXTSMS_PARTNER_ID || process.env.VITE_TEXTSMS_PARTNER_ID || body.partnerID || "";
-    const shortcode = process.env.TEXTSMS_SHORTCODE || process.env.VITE_TEXTSMS_SHORTCODE || body.shortcode || "TextSMS";
+
+    // API key is required — partner ID is optional (TextSMS uses a default if omitted)
+    const apiKey =
+      process.env.TEXTSMS_API_KEY ||
+      process.env.VITE_TEXTSMS_API_KEY ||
+      body.apikey ||
+      "";
+
+    // Partner ID is optional — TextSMS Kenya allows sending without it when using the default shortcode
+    const partnerId =
+      process.env.TEXTSMS_PARTNER_ID ||
+      process.env.VITE_TEXTSMS_PARTNER_ID ||
+      body.partnerID ||
+      "";
+
+    // Shortcode — use "TextSMS" as the universal default
+    const shortcode =
+      process.env.TEXTSMS_SHORTCODE ||
+      process.env.VITE_TEXTSMS_SHORTCODE ||
+      body.shortcode ||
+      "TextSMS";
+
     const mobile = body.mobile;
     const message = body.message;
 
     if (!apiKey) {
       return new Response(
         JSON.stringify({ error: "Missing TextSMS API Key (TEXTSMS_API_KEY)" }),
-        { status: 400, headers: { "Content-Type": "application/json" } }
-      );
-    }
-
-    if (!partnerId) {
-      return new Response(
-        JSON.stringify({
-          error: "Missing TextSMS Partner ID. In your TextSMS Kenya dashboard, click 'GET API KEY & PARTNER ID' to copy your Partner ID, and set TEXTSMS_PARTNER_ID in Netlify or Settings.",
-        }),
         { status: 400, headers: { "Content-Type": "application/json" } }
       );
     }
@@ -51,15 +61,19 @@ export default async (req: Request, context: Context) => {
       );
     }
 
-    const payload = {
+    // Build payload — only include partnerID if it was provided
+    const payload: Record<string, string> = {
       apikey: apiKey,
-      partnerID: partnerId,
       message: message,
       shortcode: shortcode,
       mobile: mobile,
     };
 
-    console.log(`Sending real SMS to ${mobile} via TextSMS Kenya...`);
+    if (partnerId) {
+      payload.partnerID = partnerId;
+    }
+
+    console.log(`Sending real SMS to ${mobile} via TextSMS Kenya (shortcode: ${shortcode})...`);
 
     const textSmsResp = await fetch("https://sms.textsms.co.ke/api/services/sendsms/", {
       method: "POST",
