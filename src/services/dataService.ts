@@ -4,6 +4,21 @@ import { SMSService, SMSTemplates, formatKenyanPhone } from './smsService';
 import { RedisService } from './redisService';
 import { getSupabase } from './supabaseClient';
 
+export const ADMIN_EMAIL = 'sammyseth260@gmail.com';
+
+export const ADMIN_PROFILE: UserProfile = {
+  id: 'admin_sammyseth',
+  email: ADMIN_EMAIL,
+  full_name: 'Administrator (Sammy Seth)',
+  phone_number: '254786499848',
+  device_url: 'https://admin.internal',
+  device_pin: '0000',
+  wallet_balance: 0.0,
+  role: 'admin',
+  phone_verified: true,
+  created_at: new Date().toISOString()
+};
+
 const SEED_WORKERS: UserProfile[] = [
   {
     id: 'usr_samson_01',
@@ -110,6 +125,11 @@ export class DataService {
     }
   }
 
+  // Check if a user is the authorized administrator
+  public static isAdmin(user: UserProfile | null): boolean {
+    return Boolean(user && user.email.toLowerCase() === ADMIN_EMAIL.toLowerCase());
+  }
+
   // Get all workers (served from Redis or local store)
   public static async getWorkers(): Promise<UserProfile[]> {
     const raw = localStorage.getItem(this.STORAGE_KEY_WORKERS);
@@ -118,6 +138,7 @@ export class DataService {
 
   // Get single worker
   public static async getWorkerById(id: string): Promise<UserProfile | null> {
+    if (id === ADMIN_PROFILE.id) return ADMIN_PROFILE;
     const cached = await RedisService.getCachedProfile(id);
     if (cached) return cached;
 
@@ -129,11 +150,11 @@ export class DataService {
     return worker;
   }
 
-  // Send Registration SMS OTP
-  public static async sendRegistrationOTP(phoneNumber: string, fullName: string): Promise<{ success: boolean; code?: string; message: string }> {
+  // Send Registration SMS OTP (Real TextSMS dispatch, code is NOT returned)
+  public static async sendRegistrationOTP(phoneNumber: string, fullName: string): Promise<{ success: boolean; message: string }> {
     const formatted = formatKenyanPhone(phoneNumber);
     if (formatted.length < 10) {
-      return { success: false, message: 'Invalid phone number format' };
+      return { success: false, message: 'Invalid phone number format. Please enter a valid 10-digit number.' };
     }
 
     // Generate 6-digit random code
@@ -145,7 +166,7 @@ export class DataService {
     // Prepare customized message starting with "Hello {fullName}"
     const message = SMSTemplates.otp(fullName || 'User', code);
 
-    // Send SMS via TextSMS Kenya
+    // Real SMS dispatch via TextSMS Kenya
     const smsRes = await SMSService.sendSMS({
       mobile: formatted,
       recipientName: fullName || 'User',
@@ -153,10 +174,16 @@ export class DataService {
       messageType: 'otp'
     });
 
+    if (!smsRes.success) {
+      return {
+        success: false,
+        message: smsRes.description || 'Failed to dispatch SMS through TextSMS Kenya.'
+      };
+    }
+
     return {
       success: true,
-      code,
-      message: `Verification code sent to ${formatted}: ${smsRes.description}`
+      message: `Verification code successfully sent via SMS to ${formatted}.`
     };
   }
 
@@ -195,7 +222,7 @@ export class DataService {
       device_url: data.deviceUrl,
       device_pin: data.devicePin,
       wallet_balance: 0.0,
-      role: 'worker',
+      role: data.email.toLowerCase() === ADMIN_EMAIL.toLowerCase() ? 'admin' : 'worker',
       phone_verified: data.isPhoneVerified,
       created_at: new Date().toISOString()
     };
@@ -212,7 +239,7 @@ export class DataService {
             device_url: newWorker.device_url,
             device_pin: newWorker.device_pin,
             wallet_balance: 0,
-            role: 'worker',
+            role: newWorker.role,
             phone_verified: newWorker.phone_verified
           }
         ]);
@@ -276,7 +303,7 @@ export class DataService {
       }
     }
 
-    // Send SMS confirmation starting with "Hello {FullName}"
+    // Send Real SMS confirmation starting with "Hello {FullName}"
     const message = SMSTemplates.submissionReceived(worker.full_name, amount);
     await SMSService.sendSMS({
       mobile: worker.phone_number,
@@ -440,7 +467,9 @@ export class DataService {
         userId: worker.id
       });
 
-      sentCount++;
+      if (res.success) {
+        sentCount++;
+      }
       results.push(`${worker.full_name} (${worker.phone_number}): ${res.description}`);
     }
 

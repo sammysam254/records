@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import type { UserProfile, WeeklySubmission, SMSLog } from './types';
-import { DataService } from './services/dataService';
+import { DataService, ADMIN_EMAIL } from './services/dataService';
 import { SMSService } from './services/smsService';
 import { Navbar } from './components/Navbar';
 import { WorkerView } from './components/WorkerView';
@@ -29,6 +29,11 @@ export function App() {
     setWorkers(loadedWorkers);
     setSubmissions(loadedSubmissions);
     setCurrentUser(active);
+    if (active && active.email.toLowerCase() === ADMIN_EMAIL.toLowerCase()) {
+      setCurrentRoleView('admin');
+    } else {
+      setCurrentRoleView('worker');
+    }
     setSmsLogs(SMSService.getLogs());
   };
 
@@ -50,20 +55,11 @@ export function App() {
     }
 
     if (target === 'admin') {
+      if (!currentUser || currentUser.email.toLowerCase() !== ADMIN_EMAIL.toLowerCase()) {
+        showToast('Access Denied: Only user with email sammyseth260@gmail.com can access the admin panel.');
+        return;
+      }
       setCurrentRoleView('admin');
-      const adminProfile: UserProfile = {
-        id: 'admin_root',
-        email: 'admin@records.io',
-        full_name: 'Administrator',
-        phone_number: '254700000000',
-        device_url: 'https://admin.internal',
-        device_pin: '0000',
-        wallet_balance: 0,
-        role: 'admin',
-        phone_verified: true,
-        created_at: new Date().toISOString()
-      };
-      setCurrentUser(adminProfile);
       showToast('Switched to Administrator Control Hub');
     } else {
       setCurrentRoleView('worker');
@@ -92,14 +88,7 @@ export function App() {
 
       {/* Main Content Area */}
       <main style={{ flex: 1, paddingBottom: '3rem' }}>
-        {currentRoleView === 'worker' && currentUser ? (
-          <WorkerView
-            worker={currentUser}
-            submissions={submissions}
-            onRefresh={loadData}
-            onShowToast={showToast}
-          />
-        ) : (
+        {currentRoleView === 'admin' && currentUser?.email.toLowerCase() === ADMIN_EMAIL.toLowerCase() ? (
           <AdminView
             workers={workers}
             submissions={submissions}
@@ -107,7 +96,14 @@ export function App() {
             onRefresh={loadData}
             onShowToast={showToast}
           />
-        )}
+        ) : currentUser ? (
+          <WorkerView
+            worker={currentUser}
+            submissions={submissions}
+            onRefresh={loadData}
+            onShowToast={showToast}
+          />
+        ) : null}
       </main>
 
       {/* Footer Info */}
@@ -143,7 +139,11 @@ export function App() {
         onSuccess={(newUser) => {
           loadData();
           setCurrentUser(newUser);
-          setCurrentRoleView('worker');
+          if (newUser.email.toLowerCase() === ADMIN_EMAIL.toLowerCase()) {
+            setCurrentRoleView('admin');
+          } else {
+            setCurrentRoleView('worker');
+          }
         }}
         onShowToast={showToast}
       />

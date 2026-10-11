@@ -49,7 +49,7 @@ export const SMSTemplates = {
 };
 
 export class SMSService {
-  private static getStoredConfig() {
+  public static getStoredConfig() {
     const apiKey = localStorage.getItem('textsms_apikey') || import.meta.env.VITE_TEXTSMS_API_KEY || '';
     const partnerId = localStorage.getItem('textsms_partnerid') || import.meta.env.VITE_TEXTSMS_PARTNER_ID || '';
     const shortcode = localStorage.getItem('textsms_shortcode') || import.meta.env.VITE_TEXTSMS_SHORTCODE || 'TextSMS';
@@ -66,7 +66,7 @@ export class SMSService {
       finalMessage = `Hello ${params.recipientName}, ${finalMessage}`;
     }
 
-    // Try Netlify serverless function first if available, else direct TextSMS API
+    // Try Netlify serverless function first (handles TextSMS API server-side)
     try {
       const netlifyResp = await fetch('/.netlify/functions/send-sms', {
         method: 'POST',
@@ -78,101 +78,62 @@ export class SMSService {
           partnerID: partnerId,
           shortcode: shortcode
         })
-      }).catch(() => null);
+      });
 
-      if (netlifyResp && netlifyResp.ok) {
-        const data = await netlifyResp.json();
-        const log = this.recordLog(params, formattedMobile, finalMessage, 200, 'Delivered via Netlify Function');
-        return {
-          success: true,
-          messageId: data.messageid || 'NETLIFY-' + Date.now(),
-          statusCode: 200,
-          description: 'SMS Sent Successfully',
-          formattedMobile,
-          log
-        };
+      const data = await netlifyResp.json();
+
+      if (!netlifyResp.ok) {
+        const errorMsg = data.error || data['response-description'] || `HTTP ${netlifyResp.status}`;
+        throw new Error(`TextSMS Dispatch Failed: ${errorMsg}`);
       }
-    } catch {
-      // Fallback
-    }
 
-    // Direct TextSMS API
-    if (apiKey && partnerId) {
-      try {
-        const payload = {
-          apikey: apiKey,
-          partnerID: partnerId,
-          message: finalMessage,
-          shortcode: shortcode,
-          mobile: formattedMobile
-        };
+      // Check TextSMS API response payload
+      const responseEntry = data?.responses?.[0] || data;
+      const respCode = responseEntry['respose-code'] || responseEntry['response-code'] || 200;
+      const desc = responseEntry['response-description'] || 'SMS Dispatched';
+      const msgId = responseEntry.messageid;
 
-        const response = await fetch('https://sms.textsms.co.ke/api/services/sendsms/', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
-        });
-
-        const data = await response.json();
-        const respCode = data?.responses?.[0]?.['respose-code'] || response.status;
-        const desc = data?.responses?.[0]?.['response-description'] || 'Dispatched';
-        const msgId = data?.responses?.[0]?.messageid;
-
-        const isSuccess = respCode === 200;
-        const log = this.recordLog(params, formattedMobile, finalMessage, isSuccess ? 200 : respCode, desc);
-
-        return {
-          success: isSuccess,
-          messageId: msgId,
-          statusCode: respCode,
-          description: desc,
-          formattedMobile,
-          log
-        };
-      } catch (err: unknown) {
-        const errorMsg = err instanceof Error ? err.message : 'Network notice';
-        console.warn('TextSMS notice:', errorMsg);
-        
-        const log = this.recordLog(params, formattedMobile, finalMessage, 200, `Delivered (Simulated/Dev Mode: ${errorMsg})`);
-        return {
-          success: true,
-          messageId: 'SIM-' + Math.floor(100000 + Math.random() * 900000),
-          statusCode: 200,
-          description: `Queued & Sent to ${formattedMobile}: "${finalMessage}"`,
-          formattedMobile,
-          log
-        };
+      if (respCode !== 200) {
+        throw new Error(`TextSMS Error (${respCode}): ${desc}`);
       }
-    }
 
-    // Dispatched with API key (or simulated if in browser without CORS proxy)
-    const log = this.recordLog(params, formattedMobile, finalMessage, 200, `SMS queued to ${formattedMobile}`);
-    return {
-      success: true,
-      messageId: 'SMS-' + Date.now(),
-      statusCode: 200,
-      description: `SMS Sent to ${formattedMobile}`,
-      formattedMobile,
-      log
-    };
+      const log = this.recordLog(params, formattedMobile, finalMessage, 200, desc);
+
+      return {
+        success: true,
+        messageId: msgId,
+        statusCode: 200,
+        description: desc,
+        formattedMobile,
+        log
+      };
+    } catch (err: any) {
+      console.error('Real SMS sending error:', err);
+      // NO SIMULATION FALLBACK - Report real error
+      const log = this.recordLog(params, formattedMobile, finalMessage, 500, err.message || 'SMS Delivery Failed');
+      return {
+        success: false,
+        statusCode: 500,
+        description: err.message || 'Failed to send SMS via TextSMS Kenya gateway.',
+        formattedMobile,
+        log
+      };
+    }
   }
 
   public static async checkBalance(): Promise<{ balance?: string; raw?: unknown; error?: string }> {
     const { apiKey, partnerId } = this.getStoredConfig();
-    if (!apiKey) {
-      return { balance: 'Please configure TextSMS API Key' };
-    }
 
     try {
-      const response = await fetch('https://sms.textsms.co.ke/api/services/getbalance/', {
+      const response = await fetch('/.netlify/functions/check-balance', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ apikey: apiKey, partnerID: partnerId })
       });
       const data = await response.json();
       return { raw: data, balance: JSON.stringify(data) };
-    } catch {
-      return { balance: 'Balance check active (TextSMS endpoint reached via Netlify Function)' };
+    } catch (err: any) {
+      return { error: err.message || 'Failed to check balance' };
     }
   }
 

@@ -1,5 +1,6 @@
 import React from 'react';
 import type { UserProfile } from '../types';
+import { ADMIN_EMAIL } from '../services/dataService';
 import { 
   ShieldCheck, 
   User, 
@@ -24,6 +25,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   onSwitchUser,
   onLogout
 }) => {
+  const isAuthorizedAdmin = currentUser?.email.toLowerCase() === ADMIN_EMAIL.toLowerCase();
+
   return (
     <header className="glass-panel" style={{ borderRadius: 0, borderTop: 'none', borderLeft: 'none', borderRight: 'none', position: 'sticky', top: 0, zIndex: 50, padding: '0.85rem 1.5rem' }}>
       <div style={{ maxWidth: '1400px', margin: '0 auto', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap' }}>
@@ -72,52 +75,55 @@ export const Navbar: React.FC<NavbarProps> = ({
 
         {/* User / Role & Actions */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-          {/* Quick Demo Switcher */}
-          <div style={{ display: 'flex', background: 'rgba(0,0,0,0.3)', padding: '3px', borderRadius: '10px', border: '1px solid var(--border-subtle)' }}>
-            <button
-              onClick={() => onSwitchUser('worker')}
-              style={{
-                padding: '0.4rem 0.75rem',
-                fontSize: '0.75rem',
-                fontWeight: 600,
-                borderRadius: '7px',
-                border: 'none',
-                cursor: 'pointer',
-                background: currentUser?.role === 'worker' ? 'var(--accent-cyan)' : 'transparent',
-                color: currentUser?.role === 'worker' ? '#0a0d14' : 'var(--text-muted)'
-              }}
-              title="View as Worker"
-            >
-              Worker Mode
-            </button>
-            <button
-              onClick={() => onSwitchUser('admin')}
-              style={{
-                padding: '0.4rem 0.75rem',
-                fontSize: '0.75rem',
-                fontWeight: 600,
-                borderRadius: '7px',
-                border: 'none',
-                cursor: 'pointer',
-                background: currentUser?.role === 'admin' ? 'var(--accent-violet)' : 'transparent',
-                color: currentUser?.role === 'admin' ? '#ffffff' : 'var(--text-muted)'
-              }}
-              title="View as Administrator"
-            >
-              Admin Mode
-            </button>
-          </div>
+          
+          {/* Admin Mode is ONLY shown for sammyseth260@gmail.com */}
+          {isAuthorizedAdmin && (
+            <div style={{ display: 'flex', background: 'rgba(0,0,0,0.3)', padding: '3px', borderRadius: '10px', border: '1px solid var(--border-subtle)' }}>
+              <button
+                onClick={() => onSwitchUser('worker')}
+                style={{
+                  padding: '0.4rem 0.75rem',
+                  fontSize: '0.75rem',
+                  fontWeight: 600,
+                  borderRadius: '7px',
+                  border: 'none',
+                  cursor: 'pointer',
+                  background: currentUser?.role === 'worker' ? 'var(--accent-cyan)' : 'transparent',
+                  color: currentUser?.role === 'worker' ? '#0a0d14' : 'var(--text-muted)'
+                }}
+                title="View as Worker"
+              >
+                Worker Mode
+              </button>
+              <button
+                onClick={() => onSwitchUser('admin')}
+                style={{
+                  padding: '0.4rem 0.75rem',
+                  fontSize: '0.75rem',
+                  fontWeight: 600,
+                  borderRadius: '7px',
+                  border: 'none',
+                  cursor: 'pointer',
+                  background: currentUser?.role === 'admin' ? 'var(--accent-violet)' : 'transparent',
+                  color: currentUser?.role === 'admin' ? '#ffffff' : 'var(--text-muted)'
+                }}
+                title="Administrator Panel (sammyseth260@gmail.com)"
+              >
+                Admin Panel
+              </button>
+            </div>
+          )}
 
           {/* Current profile info */}
           {currentUser && (
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'rgba(255, 255, 255, 0.04)', padding: '0.35rem 0.75rem', borderRadius: '10px', border: '1px solid var(--border-subtle)' }}>
-              <div style={{ width: '28px', height: '28px', borderRadius: '50%', background: currentUser.role === 'admin' ? 'var(--accent-violet)' : 'var(--accent-cyan)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                {currentUser.role === 'admin' ? <ShieldCheck size={16} color="#fff" /> : <User size={16} color="#000" />}
+              <div style={{ width: '28px', height: '28px', borderRadius: '50%', background: isAuthorizedAdmin ? 'var(--accent-violet)' : 'var(--accent-cyan)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                {isAuthorizedAdmin ? <ShieldCheck size={16} color="#fff" /> : <User size={16} color="#000" />}
               </div>
               <div style={{ textAlign: 'left' }}>
                 <div style={{ fontSize: '0.8rem', fontWeight: 600 }}>{currentUser.full_name}</div>
-                <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)', textTransform: 'capitalize' }}>
-                  {currentUser.role}
+                <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>
+                  {isAuthorizedAdmin ? 'Admin (sammyseth260)' : currentUser.email}
                 </div>
               </div>
             </div>
@@ -133,12 +139,12 @@ export const Navbar: React.FC<NavbarProps> = ({
             <Settings size={16} />
           </button>
 
-          {/* Switch/Register Button */}
+          {/* Register New Worker */}
           <button
             onClick={() => onSwitchUser('new')}
             className="btn-secondary"
             style={{ padding: '0.5rem 0.75rem', borderRadius: '9px' }}
-            title="Register New Worker"
+            title="Register Worker"
           >
             <Users size={16} />
           </button>
@@ -148,7 +154,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             onClick={onLogout}
             className="btn-secondary"
             style={{ padding: '0.5rem 0.75rem', borderRadius: '9px' }}
-            title="Logout / Switch Account"
+            title="Logout"
           >
             <LogOut size={16} />
           </button>
