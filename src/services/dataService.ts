@@ -25,15 +25,56 @@ const KEY_SUBMISSIONS = 'records_submissions_db';
 const KEY_CURRENT     = 'records_active_user';
 
 // ─── Helpers ─────────────────────────────────────────────────
+export function isFakeWorker(w: Partial<UserProfile> | null | undefined): boolean {
+  if (!w) return true;
+  const email = (w.email || '').toLowerCase().trim();
+  const id = (w.id || '').toLowerCase().trim();
+  const phone = (w.phone_number || '').trim();
+  // Filter out any legacy fake/seed users
+  if (email.endsWith('@records.io')) return true;
+  if (id.startsWith('usr_samson') || id.startsWith('usr_faith') || id.startsWith('usr_kevin')) return true;
+  if (phone === '254712345678' || phone === '254722998877' || phone === '254799112233') return true;
+  return false;
+}
+
 function localWorkers(): UserProfile[] {
-  try { return JSON.parse(localStorage.getItem(KEY_WORKERS) || '[]'); } catch { return []; }
+  try {
+    const raw = localStorage.getItem(KEY_WORKERS);
+    if (!raw) return [];
+    const list: UserProfile[] = JSON.parse(raw);
+    const cleaned = list.filter(w => !isFakeWorker(w));
+    if (cleaned.length !== list.length) {
+      saveLocalWorkers(cleaned);
+    }
+    return cleaned;
+  } catch { return []; }
 }
+
 function saveLocalWorkers(list: UserProfile[]) {
-  localStorage.setItem(KEY_WORKERS, JSON.stringify(list));
+  const cleaned = list.filter(w => !isFakeWorker(w));
+  localStorage.setItem(KEY_WORKERS, JSON.stringify(cleaned));
 }
+
 function localSubmissions(): WeeklySubmission[] {
-  try { return JSON.parse(localStorage.getItem(KEY_SUBMISSIONS) || '[]'); } catch { return []; }
+  try {
+    const raw = localStorage.getItem(KEY_SUBMISSIONS);
+    if (!raw) return [];
+    const list: WeeklySubmission[] = JSON.parse(raw);
+    const cleaned = list.filter(s => {
+      const id = (s.id || '').toLowerCase();
+      const uid = (s.user_id || '').toLowerCase();
+      if (id === 'sub_001' || id === 'sub_002' || id === 'sub_003') return false;
+      if (uid.startsWith('usr_samson') || uid.startsWith('usr_faith') || uid.startsWith('usr_kevin')) return false;
+      if (s.user && isFakeWorker(s.user)) return false;
+      return true;
+    });
+    if (cleaned.length !== list.length) {
+      saveLocalSubmissions(cleaned);
+    }
+    return cleaned;
+  } catch { return []; }
 }
+
 function saveLocalSubmissions(list: WeeklySubmission[]) {
   localStorage.setItem(KEY_SUBMISSIONS, JSON.stringify(list));
 }
@@ -43,12 +84,18 @@ export class DataService {
   public static getCurrentUser(): UserProfile | null {
     try {
       const raw = localStorage.getItem(KEY_CURRENT);
-      return raw ? JSON.parse(raw) : null;
+      if (!raw) return null;
+      const user: UserProfile = JSON.parse(raw);
+      if (isFakeWorker(user)) {
+        localStorage.removeItem(KEY_CURRENT);
+        return null;
+      }
+      return user;
     } catch { return null; }
   }
 
   public static setCurrentUser(user: UserProfile | null): void {
-    if (user) {
+    if (user && !isFakeWorker(user)) {
       localStorage.setItem(KEY_CURRENT, JSON.stringify(user));
     } else {
       localStorage.removeItem(KEY_CURRENT);
@@ -61,20 +108,67 @@ export class DataService {
 
   // ─── Init ─────────────────────────────────────────────────
   public static async init(): Promise<void> {
-    // Nothing to seed — data lives in Supabase. localStorage is just a session cache.
+    // Purge any legacy fake/seed data from localStorage
+    try {
+      localWorkers();
+      localSubmissions();
+      const current = this.getCurrentUser();
+      if (current && isFakeWorker(current)) {
+        this.setCurrentUser(null);
+      }
+    } catch {
+      // ignore
+    }
   }
 
-  // ─── GET WORKERS ──────────────────────────────────────────
-  // Primary: Netlify workers function (Supabase Admin), Fallback: Supabase direct & Redis/local.
-  public static async getWorkers(): Promise<UserProfile[]> {
-    // 1. Try serverless function (bypasses RLS recursion using Supabase admin)
+  // ─── GET WORKERS (Ultra-Fast Redis Cache + Auto DB Sync) ─────
+  private static isRefreshingWorkers = false;
+
+  public static async getWorkers(forceFresh: boolean = false): Promise<UserProfile[]> {
+    // 1. Ultra-fast Redis Cache Check (sub-millisecond instant return)
+    if (!forceFresh) {
+      try {
+        const cached = await RedisService.getCachedWorkers();
+        if (cached && cached.length > 0) {
+          saveLocalWorkers(cached);
+          // Trigger asynchronous background refresh from database to keep cache completely synchronized
+          this.refreshWorkersFromDbInBackground();
+          return cached;
+        }
+      } catch (err) {
+        console.warn('Redis workers cache check skipped:', err);
+      }
+    }
+
+    // 2. Authoritative Database Fetch & Redis Self-Cleaning Reconciliation
+    return await this.fetchAndSyncWorkersFromDb();
+  }
+
+  private static async refreshWorkersFromDbInBackground(): Promise<void> {
+    if (this.isRefreshingWorkers) return;
+    this.isRefreshingWorkers = true;
+    try {
+      await this.fetchAndSyncWorkersFromDb();
+    } catch {
+      // Background sync non-blocking
+    } finally {
+      this.isRefreshingWorkers = false;
+    }
+  }
+
+  // Fetch from database, update Redis cache, and purge all stale keys
+  public static async fetchAndSyncWorkersFromDb(): Promise<UserProfile[]> {
+    // 1. Try serverless function (bypasses RLS using Supabase Admin)
     try {
       const resp = await fetch('/.netlify/functions/workers');
       if (resp.ok) {
         const workers: UserProfile[] = await resp.json();
-        if (Array.isArray(workers) && workers.length > 0) {
-          saveLocalWorkers(workers);
-          return workers;
+        if (Array.isArray(workers)) {
+          const realWorkers = workers.filter(w => !isFakeWorker(w));
+          saveLocalWorkers(realWorkers);
+          // Redis auto-cleans stale keys and caches the authoritative worker list
+          await RedisService.syncAndCleanWorkers(realWorkers);
+          return realWorkers;
         }
       }
     } catch {
@@ -90,21 +184,26 @@ export class DataService {
           .select('*')
           .order('created_at', { ascending: false });
 
-        if (!error && data && data.length > 0) {
-          const workers: UserProfile[] = data.map((r: any) => ({
-            id: r.id,
-            email: r.email || '',
-            full_name: r.full_name,
-            phone_number: r.phone_number,
-            device_url: r.device_url,
-            device_pin: r.device_pin,
-            wallet_balance: parseFloat(r.wallet_balance) || 0,
-            role: r.role || 'worker',
-            phone_verified: r.phone_verified,
-            created_at: r.created_at
-          }));
-          saveLocalWorkers(workers);
-          return workers;
+        if (!error && data) {
+          const realWorkers: UserProfile[] = data
+            .map((r: any) => ({
+              id: r.id,
+              email: r.email || '',
+              full_name: r.full_name,
+              phone_number: r.phone_number,
+              device_url: r.device_url,
+              device_pin: r.device_pin,
+              wallet_balance: parseFloat(r.wallet_balance) || 0,
+              role: r.role || 'worker',
+              phone_verified: r.phone_verified,
+              created_at: r.created_at
+            }))
+            .filter(w => !isFakeWorker(w));
+
+          saveLocalWorkers(realWorkers);
+          // Redis auto-cleans stale keys and caches the authoritative worker list
+          await RedisService.syncAndCleanWorkers(realWorkers);
+          return realWorkers;
         }
       } catch (err) {
         console.warn('Supabase getWorkers query error:', err);
@@ -494,8 +593,41 @@ export class DataService {
     return { success: true, submission: newSub };
   }
 
-  // ─── GET SUBMISSIONS ──────────────────────────────────────
-  public static async getSubmissions(): Promise<WeeklySubmission[]> {
+  // ─── GET SUBMISSIONS (Ultra-Fast Redis Cache + Auto DB Sync) ──
+  private static isRefreshingSubmissions = false;
+
+  public static async getSubmissions(forceFresh: boolean = false): Promise<WeeklySubmission[]> {
+    // 1. Ultra-fast Redis Cache Check
+    if (!forceFresh) {
+      try {
+        const cached = await RedisService.getCachedSubmissions();
+        if (cached && cached.length > 0) {
+          saveLocalSubmissions(cached);
+          this.refreshSubmissionsFromDbInBackground();
+          return cached;
+        }
+      } catch (err) {
+        console.warn('Redis submissions cache check skipped:', err);
+      }
+    }
+
+    // 2. Fetch fresh from Database and sync Redis
+    return await this.fetchAndSyncSubmissionsFromDb();
+  }
+
+  private static async refreshSubmissionsFromDbInBackground(): Promise<void> {
+    if (this.isRefreshingSubmissions) return;
+    this.isRefreshingSubmissions = true;
+    try {
+      await this.fetchAndSyncSubmissionsFromDb();
+    } catch {
+      // Non-blocking
+    } finally {
+      this.isRefreshingSubmissions = false;
+    }
+  }
+
+  public static async fetchAndSyncSubmissionsFromDb(): Promise<WeeklySubmission[]> {
     const supabase = getSupabase();
 
     if (supabase) {
@@ -512,30 +644,39 @@ export class DataService {
           .order('created_at', { ascending: false });
 
         if (!error && data) {
-          const subs: WeeklySubmission[] = data.map((s: any) => ({
-            id: s.id,
-            user_id: s.user_id,
-            amount_made: parseFloat(s.amount_made),
-            calculated_credit: parseFloat(s.calculated_credit),
-            status: s.status,
-            week_date: s.week_date,
-            created_at: s.created_at,
-            approved_at: s.approved_at,
-            paid_at: s.paid_at,
-            user: s.profiles ? {
-              id: s.profiles.id,
-              email: s.profiles.email || '',
-              full_name: s.profiles.full_name,
-              phone_number: s.profiles.phone_number,
-              device_url: s.profiles.device_url,
-              device_pin: s.profiles.device_pin,
-              wallet_balance: parseFloat(s.profiles.wallet_balance) || 0,
-              role: s.profiles.role,
-              phone_verified: s.profiles.phone_verified,
-              created_at: s.profiles.created_at
-            } : undefined
-          }));
+          const subs: WeeklySubmission[] = data
+            .filter((s: any) => {
+              if (s.id === 'sub_001' || s.id === 'sub_002' || s.id === 'sub_003') return false;
+              if (s.profiles && isFakeWorker(s.profiles)) return false;
+              return true;
+            })
+            .map((s: any) => ({
+              id: s.id,
+              user_id: s.user_id,
+              amount_made: parseFloat(s.amount_made),
+              calculated_credit: parseFloat(s.calculated_credit),
+              status: s.status,
+              week_date: s.week_date,
+              created_at: s.created_at,
+              approved_at: s.approved_at,
+              paid_at: s.paid_at,
+              user: s.profiles ? {
+                id: s.profiles.id,
+                email: s.profiles.email || '',
+                full_name: s.profiles.full_name,
+                phone_number: s.profiles.phone_number,
+                device_url: s.profiles.device_url,
+                device_pin: s.profiles.device_pin,
+                wallet_balance: parseFloat(s.profiles.wallet_balance) || 0,
+                role: s.profiles.role,
+                phone_verified: s.profiles.phone_verified,
+                created_at: s.profiles.created_at
+              } : undefined
+            }));
+
           saveLocalSubmissions(subs);
+          // Sync & Clean Redis submissions cache
+          await RedisService.syncAndCleanSubmissions(subs);
           return subs;
         }
       } catch (err) {

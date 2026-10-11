@@ -29,7 +29,7 @@ interface AdminViewProps {
   workers: UserProfile[];
   submissions: WeeklySubmission[];
   smsLogs: SMSLog[];
-  onRefresh: () => void;
+  onRefresh: (forceFresh?: boolean) => void;
   onShowToast: (message: string) => void;
 }
 
@@ -378,10 +378,10 @@ export const AdminView: React.FC<AdminViewProps> = ({
         </div>
 
         <button
-          onClick={onRefresh}
+          onClick={() => onRefresh(true)}
           className="btn-secondary"
           style={{ fontSize: '0.78rem', whiteSpace: 'nowrap' }}
-          title="Refresh Data from Supabase & Redis"
+          title="Force Fresh Sync from Supabase and Reconcile Redis Cache"
         >
           <RefreshCw size={13} /> Sync Now
         </button>

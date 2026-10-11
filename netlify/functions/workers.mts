@@ -45,22 +45,31 @@ export default async (req: Request, _context: Context) => {
       const userMap = new Map();
       (authData?.users || []).forEach((u) => userMap.set(u.id, u));
 
-      const workers = (profiles || []).map((p: any) => {
-        const authUser = userMap.get(p.id);
-        const meta = authUser?.user_metadata || {};
-        return {
-          id: p.id,
-          email: authUser?.email || p.email || "",
-          full_name: p.full_name || meta.full_name || "Worker",
-          phone_number: p.phone_number || meta.phone_number || "",
-          device_url: p.device_url || meta.device_url || "",
-          device_pin: p.device_pin || meta.device_pin || "",
-          wallet_balance: parseFloat(p.wallet_balance) || 0,
-          role: p.role || "worker",
-          phone_verified: Boolean(p.phone_verified),
-          created_at: p.created_at,
-        };
-      });
+      const workers = (profiles || [])
+        .filter((p: any) => {
+          const authUser = userMap.get(p.id);
+          const email = (authUser?.email || p.email || "").toLowerCase().trim();
+          const phone = (p.phone_number || "").trim();
+          if (email.endsWith("@records.io")) return false;
+          if (phone === "254712345678" || phone === "254722998877" || phone === "254799112233") return false;
+          return true;
+        })
+        .map((p: any) => {
+          const authUser = userMap.get(p.id);
+          const meta = authUser?.user_metadata || {};
+          return {
+            id: p.id,
+            email: authUser?.email || p.email || "",
+            full_name: p.full_name || meta.full_name || "Worker",
+            phone_number: p.phone_number || meta.phone_number || "",
+            device_url: p.device_url || meta.device_url || "",
+            device_pin: p.device_pin || meta.device_pin || "",
+            wallet_balance: parseFloat(p.wallet_balance) || 0,
+            role: p.role || "worker",
+            phone_verified: Boolean(p.phone_verified),
+            created_at: p.created_at,
+          };
+        });
 
       return new Response(JSON.stringify(workers), {
         status: 200,

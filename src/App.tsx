@@ -20,10 +20,10 @@ export function App() {
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   // Initialize and load data
-  const loadData = async () => {
+  const loadData = async (forceFresh: boolean = false) => {
     await DataService.init();
-    const loadedWorkers = await DataService.getWorkers();
-    const loadedSubmissions = await DataService.getSubmissions();
+    const loadedWorkers = await DataService.getWorkers(forceFresh);
+    const loadedSubmissions = await DataService.getSubmissions(forceFresh);
     const active = DataService.getCurrentUser(); // No auto-login fallback for strangers
     
     setWorkers(loadedWorkers);
