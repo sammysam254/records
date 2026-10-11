@@ -10,7 +10,7 @@ export const ADMIN_PROFILE: UserProfile = {
   id: 'admin_sammyseth',
   email: ADMIN_EMAIL,
   full_name: 'Administrator (Sammy Seth)',
-  phone_number: '254786499848',
+  phone_number: '254706499848',
   device_url: 'https://admin.internal',
   device_pin: '0000',
   wallet_balance: 0.0,

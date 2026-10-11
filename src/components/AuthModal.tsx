@@ -26,7 +26,7 @@ interface AuthModalProps {
 }
 
 // Admin phone number — OTP is sent here for admin login
-const ADMIN_PHONE = '254786499848';
+const ADMIN_PHONE = '254706499848';
 
 export const AuthModal: React.FC<AuthModalProps> = ({
   isOpen,
@@ -192,11 +192,11 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const handleSendAdminOtp = async () => {
     setIsSendingAdminOtp(true);
     try {
-      // Generate OTP and store in Redis (10 min TTL)
+      // Generate OTP and store in Redis/localStorage (10 min TTL)
       const code = Math.floor(100000 + Math.random() * 900000).toString();
       await RedisService.storeOTP(ADMIN_PHONE, code);
 
-      // Send REAL SMS to admin's phone
+      // Send REAL SMS to admin's registered phone
       const message = SMSTemplates.otp('Sammy Seth', code);
       const smsRes = await SMSService.sendSMS({
         mobile: ADMIN_PHONE,
@@ -207,9 +207,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
       if (smsRes.success) {
         setAdminOtpSent(true);
-        onShowToast('Admin verification code sent via SMS to your registered phone.');
+        onShowToast('✅ Admin verification code sent via SMS to +254706****848');
       } else {
-        alert(`Failed to send admin OTP: ${smsRes.description}`);
+        // Show detailed error from TextSMS
+        alert(
+          `SMS sending failed: ${smsRes.description}\n\n` +
+          `If you keep getting this error, make sure promo messages are enabled on your phone by dialing *456*9*5# and accepting all promo messages.`
+        );
       }
     } catch (err: any) {
       alert(err.message || 'Error sending admin OTP');
@@ -412,16 +416,33 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 background: 'rgba(124, 58, 237, 0.08)',
                 border: '1px solid rgba(124, 58, 237, 0.25)',
                 borderRadius: '12px',
-                padding: '1.25rem'
+                padding: '1.25rem',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '0.85rem'
               }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem' }}>
-                  <MessageSquare size={20} color="#a78bfa" />
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.75rem' }}>
+                  <MessageSquare size={20} color="#a78bfa" style={{ marginTop: '2px', flexShrink: 0 }} />
                   <div>
                     <div style={{ fontWeight: 700, fontSize: '0.9rem' }}>Send SMS Verification Code</div>
-                    <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                      A code will be sent to the admin's registered phone number.
+                    <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '0.2rem' }}>
+                      A 6-digit code will be sent via SMS to admin phone
+                      <span style={{ color: '#c4b5fd', fontFamily: 'var(--font-mono)', marginLeft: '5px' }}>+254706****848</span>
                     </div>
                   </div>
+                </div>
+                {/* Promo messages tip */}
+                <div style={{
+                  background: 'rgba(251, 191, 36, 0.08)',
+                  border: '1px solid rgba(251, 191, 36, 0.2)',
+                  borderRadius: '8px',
+                  padding: '0.65rem 0.85rem',
+                  fontSize: '0.73rem',
+                  color: '#fbbf24',
+                  lineHeight: 1.6
+                }}>
+                  ⚠️ If SMS does not arrive, your phone may have promotional messages blocked.<br/>
+                  Dial <strong>*456*9*5#</strong> on phone 0706499848 → Accept all promo messages, then retry.
                 </div>
                 <button
                   onClick={handleSendAdminOtp}
@@ -430,7 +451,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   style={{ width: '100%', justifyContent: 'center', background: 'linear-gradient(135deg, #7c3aed, #4f46e5)' }}
                 >
                   <MessageSquare size={16} />
-                  {isSendingAdminOtp ? 'Sending SMS...' : 'Send Verification Code via SMS'}
+                  {isSendingAdminOtp ? 'Sending SMS...' : 'Send Code to +254706****848'}
                 </button>
               </div>
             )}
@@ -446,11 +467,16 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 flexDirection: 'column',
                 gap: '1rem'
               }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                  <CheckCircle2 size={18} color="#10b981" />
-                  <span style={{ fontSize: '0.85rem', color: '#10b981', fontWeight: 600 }}>
-                    Verification code sent to admin's phone
-                  </span>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <CheckCircle2 size={18} color="#10b981" />
+                    <span style={{ fontSize: '0.85rem', color: '#10b981', fontWeight: 600 }}>
+                      Code sent to +254706****848
+                    </span>
+                  </div>
+                  <div style={{ fontSize: '0.72rem', color: '#fbbf24', paddingLeft: '1.6rem' }}>
+                    ⚠️ Not received? Dial <strong>*456*9*5#</strong> on that phone to unblock promo SMS, then resend.
+                  </div>
                 </div>
                 <div>
                   <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '0.5rem' }}>
