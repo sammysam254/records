@@ -66,15 +66,24 @@ export const AdminView: React.FC<AdminViewProps> = ({
   const [adjustNotifySms, setAdjustNotifySms] = useState<boolean>(true);
   const [isSavingBalance, setIsSavingBalance] = useState<boolean>(false);
 
+  // Status Overrides for Instant Zero-Lag UI updates
+  const [statusOverrides, setStatusOverrides] = useState<Record<string, 'approved' | 'paid'>>({});
+
+  // Active submissions with real-time optimistic overrides
+  const activeSubmissions = submissions.map(s => {
+    const overridden = statusOverrides[s.id];
+    return overridden ? { ...s, status: overridden } : s;
+  });
+
   // Quick metrics
-  const pendingCount = submissions.filter(s => s.status === 'pending').length;
-  const paidCount = submissions.filter(s => s.status === 'paid').length;
+  const pendingCount = activeSubmissions.filter(s => s.status === 'pending').length;
+  const paidCount = activeSubmissions.filter(s => s.status === 'paid').length;
   const totalWalletLiability = workers.reduce((acc, w) => acc + (w.wallet_balance || 0), 0);
   const positiveBalanceUsers = workers.filter(w => (w.wallet_balance || 0) > 0).length;
   const averageBalance = workers.length > 0 ? totalWalletLiability / workers.length : 0;
 
   // Filter Submissions
-  const filteredSubmissions = submissions.filter(s => {
+  const filteredSubmissions = activeSubmissions.filter(s => {
     const matchesStatus = filterStatus === 'all' || s.status === filterStatus;
     const workerName = s.user?.full_name?.toLowerCase() || '';
     const phone = s.user?.phone_number || '';
@@ -183,17 +192,30 @@ export const AdminView: React.FC<AdminViewProps> = ({
 
   // Approve submission
   const handleApprove = async (sub: WeeklySubmission) => {
+    // 1. Instantly update UI with zero lag
+    setStatusOverrides(prev => ({ ...prev, [sub.id]: 'approved' }));
     setIsProcessing(sub.id);
     try {
       const res = await DataService.approveSubmission(sub.id);
       if (res.success) {
         confetti({ particleCount: 40, spread: 50 });
-        onShowToast(`Approved! $${sub.calculated_credit.toFixed(2)} credited to ${sub.user?.full_name}'s wallet. SMS sent.`);
-        onRefresh();
+        onShowToast(`Approved! $${sub.calculated_credit.toFixed(2)} credited to ${sub.user?.full_name || 'Worker'}'s wallet. SMS sent.`);
+        onRefresh(true);
       } else {
+        // Rollback override if failed
+        setStatusOverrides(prev => {
+          const next = { ...prev };
+          delete next[sub.id];
+          return next;
+        });
         alert(res.error || 'Failed to approve');
       }
     } catch (err: any) {
+      setStatusOverrides(prev => {
+        const next = { ...prev };
+        delete next[sub.id];
+        return next;
+      });
       alert(err.message);
     } finally {
       setIsProcessing(null);
@@ -202,17 +224,30 @@ export const AdminView: React.FC<AdminViewProps> = ({
 
   // Mark as paid
   const handleMarkAsPaid = async (sub: WeeklySubmission) => {
+    // 1. Instantly update UI with zero lag
+    setStatusOverrides(prev => ({ ...prev, [sub.id]: 'paid' }));
     setIsProcessing(sub.id);
     try {
       const res = await DataService.markSubmissionAsPaid(sub.id);
       if (res.success) {
         confetti({ particleCount: 60, spread: 70 });
-        onShowToast(`Marked as Paid! $${sub.calculated_credit.toFixed(2)} deducted from ${sub.user?.full_name}'s wallet. SMS sent.`);
-        onRefresh();
+        onShowToast(`Marked as Paid! $${sub.calculated_credit.toFixed(2)} deducted from ${sub.user?.full_name || 'Worker'}'s wallet. SMS sent.`);
+        onRefresh(true);
       } else {
+        // Rollback override if failed
+        setStatusOverrides(prev => {
+          const next = { ...prev };
+          delete next[sub.id];
+          return next;
+        });
         alert(res.error || 'Failed to mark as paid');
       }
     } catch (err: any) {
+      setStatusOverrides(prev => {
+        const next = { ...prev };
+        delete next[sub.id];
+        return next;
+      });
       alert(err.message);
     } finally {
       setIsProcessing(null);

@@ -228,6 +228,17 @@ export class DataService {
     const worker = await this.getWorkerById(userId);
     if (!worker) return { success: false, error: 'User profile not found' };
 
+    // 1. Authoritative serverless update (bypasses RLS with Supabase Admin)
+    try {
+      await fetch('/.netlify/functions/workers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'update-balance', userId, balance: cleanBalance })
+      });
+    } catch {
+      // offline / local fallback
+    }
+
     const supabase = getSupabase();
     if (supabase) {
       try {
@@ -709,7 +720,6 @@ export class DataService {
 
   // ─── APPROVE SUBMISSION ───────────────────────────────────
   public static async approveSubmission(submissionId: string): Promise<{ success: boolean; error?: string }> {
-    const supabase = getSupabase();
     const subs = await this.getSubmissions();
     const sub = subs.find(s => s.id === submissionId);
     if (!sub) return { success: false, error: 'Submission not found' };
@@ -720,21 +730,41 @@ export class DataService {
 
     const newBalance = Number((worker.wallet_balance + sub.calculated_credit).toFixed(2));
 
-    if (supabase) {
-      try {
-        await supabase.from('weekly_submissions')
-          .update({ status: 'approved', approved_at: new Date().toISOString() })
-          .eq('id', submissionId);
+    // 1. First attempt authoritative serverless approval (bypasses RLS with Supabase Admin)
+    let serverOk = false;
+    try {
+      const resp = await fetch('/.netlify/functions/workers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'approve-submission', submissionId })
+      });
+      if (resp.ok) {
+        const d = await resp.json();
+        if (d.success) serverOk = true;
+      }
+    } catch {
+      // offline / local fallback
+    }
 
-        await supabase.from('profiles')
-          .update({ wallet_balance: newBalance, updated_at: new Date().toISOString() })
-          .eq('id', worker.id);
-      } catch (err) {
-        console.warn('Supabase approve error:', err);
+    // 2. Direct client fallback if serverless was unavailable
+    if (!serverOk) {
+      const supabase = getSupabase();
+      if (supabase) {
+        try {
+          await supabase.from('weekly_submissions')
+            .update({ status: 'approved', approved_at: new Date().toISOString() })
+            .eq('id', submissionId);
+
+          await supabase.from('profiles')
+            .update({ wallet_balance: newBalance, updated_at: new Date().toISOString() })
+            .eq('id', worker.id);
+        } catch (err) {
+          console.warn('Supabase approve error:', err);
+        }
       }
     }
 
-    // Update localStorage cache
+    // 3. Update localStorage cache immediately
     const localSubs = localSubmissions();
     const idx = localSubs.findIndex(s => s.id === submissionId);
     if (idx !== -1) {
@@ -750,6 +780,8 @@ export class DataService {
       saveLocalWorkers(localWrks);
     }
 
+    // 4. CRITICAL: Synchronize Redis submissions cache immediately so it never serves stale 'pending'
+    await RedisService.syncAndCleanSubmissions(localSubs);
     await RedisService.updateWalletBalance(worker.id, newBalance);
 
     const current = this.getCurrentUser();
@@ -757,7 +789,7 @@ export class DataService {
       this.setCurrentUser({ ...current, wallet_balance: newBalance });
     }
 
-    // SMS
+    // 5. SMS Notification
     const message = SMSTemplates.approvedAndCredited(
       worker.full_name, sub.amount_made, sub.calculated_credit, newBalance
     );
@@ -774,7 +806,6 @@ export class DataService {
 
   // ─── MARK AS PAID ─────────────────────────────────────────
   public static async markSubmissionAsPaid(submissionId: string): Promise<{ success: boolean; error?: string }> {
-    const supabase = getSupabase();
     const subs = await this.getSubmissions();
     const sub = subs.find(s => s.id === submissionId);
     if (!sub) return { success: false, error: 'Submission not found' };
@@ -786,21 +817,41 @@ export class DataService {
     const deduction = sub.calculated_credit;
     const newBalance = Math.max(0, Number((worker.wallet_balance - deduction).toFixed(2)));
 
-    if (supabase) {
-      try {
-        await supabase.from('weekly_submissions')
-          .update({ status: 'paid', paid_at: new Date().toISOString() })
-          .eq('id', submissionId);
+    // 1. Authoritative serverless mark-paid (bypasses RLS with Supabase Admin)
+    let serverOk = false;
+    try {
+      const resp = await fetch('/.netlify/functions/workers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'mark-paid', submissionId })
+      });
+      if (resp.ok) {
+        const d = await resp.json();
+        if (d.success) serverOk = true;
+      }
+    } catch {
+      // offline / local fallback
+    }
 
-        await supabase.from('profiles')
-          .update({ wallet_balance: newBalance, updated_at: new Date().toISOString() })
-          .eq('id', worker.id);
-      } catch (err) {
-        console.warn('Supabase markAsPaid error:', err);
+    // 2. Direct client fallback
+    if (!serverOk) {
+      const supabase = getSupabase();
+      if (supabase) {
+        try {
+          await supabase.from('weekly_submissions')
+            .update({ status: 'paid', paid_at: new Date().toISOString() })
+            .eq('id', submissionId);
+
+          await supabase.from('profiles')
+            .update({ wallet_balance: newBalance, updated_at: new Date().toISOString() })
+            .eq('id', worker.id);
+        } catch (err) {
+          console.warn('Supabase markAsPaid error:', err);
+        }
       }
     }
 
-    // Update localStorage
+    // 3. Update localStorage cache immediately
     const localSubs = localSubmissions();
     const idx = localSubs.findIndex(s => s.id === submissionId);
     if (idx !== -1) {
@@ -816,6 +867,8 @@ export class DataService {
       saveLocalWorkers(localWrks);
     }
 
+    // 4. CRITICAL: Synchronize Redis submissions cache immediately
+    await RedisService.syncAndCleanSubmissions(localSubs);
     await RedisService.updateWalletBalance(worker.id, newBalance);
 
     const current = this.getCurrentUser();
@@ -823,7 +876,7 @@ export class DataService {
       this.setCurrentUser({ ...current, wallet_balance: newBalance });
     }
 
-    // SMS
+    // 5. SMS Notification
     const message = SMSTemplates.markedAsPaid(worker.full_name, deduction, newBalance);
     await SMSService.sendSMS({
       mobile: worker.phone_number,

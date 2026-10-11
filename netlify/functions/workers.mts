@@ -245,6 +245,149 @@ export default async (req: Request, _context: Context) => {
           headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
         });
       }
+
+      // Approve submission and credit worker balance
+      if (action === "approve-submission") {
+        const { submissionId } = body;
+        if (!submissionId) {
+          return new Response(JSON.stringify({ success: false, error: "submissionId is required" }), {
+            status: 400,
+            headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
+          });
+        }
+
+        // Try using the database RPC if available, or direct admin update
+        try {
+          const { data: rpcRes, error: rpcErr } = await sbAdmin.rpc("approve_submission", {
+            submission_id: submissionId,
+          });
+
+          if (!rpcErr && rpcRes && rpcRes.success) {
+            return new Response(JSON.stringify({ success: true, ...rpcRes }), {
+              status: 200,
+              headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
+            });
+          }
+        } catch {
+          // fallback to direct admin table update
+        }
+
+        // Fallback: direct table updates using sbAdmin
+        const { data: sub, error: subErr } = await sbAdmin
+          .from("weekly_submissions")
+          .select("*, profiles:user_id(*)")
+          .eq("id", submissionId)
+          .single();
+
+        if (subErr || !sub) {
+          return new Response(JSON.stringify({ success: false, error: subErr?.message || "Submission not found" }), {
+            status: 404,
+            headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
+          });
+        }
+
+        const now = new Date().toISOString();
+        const { error: updSubErr } = await sbAdmin
+          .from("weekly_submissions")
+          .update({ status: "approved", approved_at: now })
+          .eq("id", submissionId);
+
+        if (updSubErr) {
+          return new Response(JSON.stringify({ success: false, error: updSubErr.message }), {
+            status: 500,
+            headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
+          });
+        }
+
+        const currentBalance = parseFloat(sub.profiles?.wallet_balance || 0);
+        const credit = parseFloat(sub.calculated_credit || 0);
+        const newBalance = Number((currentBalance + credit).toFixed(2));
+
+        await sbAdmin
+          .from("profiles")
+          .update({ wallet_balance: newBalance, updated_at: now })
+          .eq("id", sub.user_id);
+
+        return new Response(JSON.stringify({ success: true, newBalance, submissionId }), {
+          status: 200,
+          headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
+        });
+      }
+
+      // Mark submission as paid and deduct from worker balance
+      if (action === "mark-paid") {
+        const { submissionId } = body;
+        if (!submissionId) {
+          return new Response(JSON.stringify({ success: false, error: "submissionId is required" }), {
+            status: 400,
+            headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
+          });
+        }
+
+        try {
+          const { data: rpcRes, error: rpcErr } = await sbAdmin.rpc("mark_submission_as_paid", {
+            submission_id: submissionId,
+          });
+
+          if (!rpcErr && rpcRes && rpcRes.success) {
+            return new Response(JSON.stringify({ success: true, ...rpcRes }), {
+              status: 200,
+              headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
+            });
+          }
+        } catch {
+          // fallback to direct admin table update
+        }
+
+        // Direct table fallback
+        const { data: sub, error: subErr } = await sbAdmin
+          .from("weekly_submissions")
+          .select("*, profiles:user_id(*)")
+          .eq("id", submissionId)
+          .single();
+
+        if (subErr || !sub) {
+          return new Response(JSON.stringify({ success: false, error: subErr?.message || "Submission not found" }), {
+            status: 404,
+            headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
+          });
+        }
+
+        const now = new Date().toISOString();
+        await sbAdmin
+          .from("weekly_submissions")
+          .update({ status: "paid", paid_at: now })
+          .eq("id", submissionId);
+
+        const currentBalance = parseFloat(sub.profiles?.wallet_balance || 0);
+        const deduction = parseFloat(sub.calculated_credit || 0);
+        const newBalance = Math.max(0, Number((currentBalance - deduction).toFixed(2)));
+
+        await sbAdmin
+          .from("profiles")
+          .update({ wallet_balance: newBalance, updated_at: now })
+          .eq("id", sub.user_id);
+
+        return new Response(JSON.stringify({ success: true, newBalance, submissionId }), {
+          status: 200,
+          headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
+        });
+      }
+
+      // Admin update balance directly
+      if (action === "update-balance") {
+        const { userId, balance } = body;
+        const cleanBalance = Number(Math.max(0, balance || 0).toFixed(2));
+        await sbAdmin
+          .from("profiles")
+          .update({ wallet_balance: cleanBalance, updated_at: new Date().toISOString() })
+          .eq("id", userId);
+
+        return new Response(JSON.stringify({ success: true, balance: cleanBalance }), {
+          status: 200,
+          headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
+        });
+      }
     }
 
     return new Response(JSON.stringify({ error: "Method not allowed" }), {
