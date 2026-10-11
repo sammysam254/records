@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { DataService, ADMIN_EMAIL, ADMIN_PROFILE } from '../services/dataService';
 import { SMSService, SMSTemplates } from '../services/smsService';
 import { RedisService } from '../services/redisService';
+import { extractDeviceSerial } from '../utils/deviceHelper';
 import type { UserProfile } from '../types';
 import { 
   UserPlus, 
@@ -15,7 +16,8 @@ import {
   User, 
   X,
   ShieldCheck,
-  MessageSquare
+  MessageSquare,
+  Smartphone
 } from 'lucide-react';
 
 interface AuthModalProps {
@@ -660,13 +662,45 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   <input
                     type="url"
                     required
-                    placeholder="https://..."
+                    placeholder="https://android10.devicecontrol.app/?token=..."
                     value={deviceUrl}
                     onChange={e => setDeviceUrl(e.target.value)}
                     className="form-input"
-                    style={{ paddingLeft: '2.5rem', fontSize: '0.85rem' }}
+                    style={{ paddingLeft: '2.5rem', fontSize: '0.82rem' }}
                   />
                 </div>
+                {/* Auto-extracted Device Serial feedback */}
+                {(() => {
+                  const detectedSerial = extractDeviceSerial(deviceUrl);
+                  if (detectedSerial) {
+                    return (
+                      <div style={{
+                        marginTop: '0.45rem',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.45rem',
+                        fontSize: '0.78rem',
+                        color: '#34d399',
+                        background: 'rgba(16, 185, 129, 0.1)',
+                        border: '1px solid rgba(16, 185, 129, 0.25)',
+                        padding: '0.35rem 0.65rem',
+                        borderRadius: '6px'
+                      }}>
+                        <CheckCircle2 size={13} color="#10b981" />
+                        <span>Device Serial: <strong style={{ fontFamily: 'var(--font-mono)', letterSpacing: '0.05em' }}>{detectedSerial}</strong></span>
+                      </div>
+                    );
+                  }
+                  if (deviceUrl.trim().length > 8) {
+                    return (
+                      <div style={{ marginTop: '0.35rem', fontSize: '0.73rem', color: 'var(--text-dim)', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                        <Smartphone size={12} />
+                        <span>Paste full stream URL to auto-extract device serial.</span>
+                      </div>
+                    );
+                  }
+                  return null;
+                })()}
               </div>
 
               <div>

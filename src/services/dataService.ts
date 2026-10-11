@@ -1,5 +1,6 @@
 import type { UserProfile, WeeklySubmission } from '../types';
 import { calculateWalletCredit } from '../utils/calculator';
+import { extractDeviceSerial } from '../utils/deviceHelper';
 import { SMSService, SMSTemplates, formatKenyanPhone, isValidKenyanPhone } from './smsService';
 import { RedisService } from './redisService';
 import { getSupabase } from './supabaseClient';
@@ -12,6 +13,7 @@ export const ADMIN_PROFILE: UserProfile = {
   full_name: 'Administrator (Sammy Seth)',
   phone_number: '254706499848',
   device_url: 'https://admin.internal',
+  device_serial: 'ADMIN-CONTROL-01',
   device_pin: '0000',
   wallet_balance: 0.0,
   role: 'admin',
@@ -192,6 +194,7 @@ export class DataService {
               full_name: r.full_name,
               phone_number: r.phone_number,
               device_url: r.device_url,
+              device_serial: r.device_serial || extractDeviceSerial(r.device_url),
               device_pin: r.device_pin,
               wallet_balance: parseFloat(r.wallet_balance) || 0,
               role: r.role || 'worker',
@@ -287,6 +290,7 @@ export class DataService {
             full_name: data.full_name,
             phone_number: data.phone_number,
             device_url: data.device_url,
+            device_serial: data.device_serial || extractDeviceSerial(data.device_url),
             device_pin: data.device_pin,
             wallet_balance: parseFloat(data.wallet_balance) || 0,
             role: data.role,
@@ -353,6 +357,8 @@ export class DataService {
     const cleanEmail = data.email.toLowerCase().trim();
     const password = data.password || 'password123';
 
+    const deviceSerial = extractDeviceSerial(data.deviceUrl);
+
     // 1. Try serverless function registration (securely registers via Supabase Admin)
     try {
       const resp = await fetch('/.netlify/functions/workers', {
@@ -365,6 +371,7 @@ export class DataService {
           fullName: data.fullName.trim(),
           phoneNumber: formattedPhone,
           deviceUrl: data.deviceUrl.trim(),
+          deviceSerial: deviceSerial,
           devicePin: data.devicePin.trim(),
           isPhoneVerified: data.isPhoneVerified
         })
@@ -373,7 +380,10 @@ export class DataService {
       if (resp.ok) {
         const result = await resp.json();
         if (result.success && result.worker) {
-          const worker: UserProfile = result.worker;
+          const worker: UserProfile = {
+            ...result.worker,
+            device_serial: result.worker.device_serial || deviceSerial
+          };
           const workers = localWorkers();
           workers.unshift(worker);
           saveLocalWorkers(workers);
@@ -399,6 +409,7 @@ export class DataService {
           full_name: data.fullName.trim(),
           phone_number: formattedPhone,
           device_url: data.deviceUrl.trim(),
+          device_serial: deviceSerial,
           device_pin: data.devicePin.trim(),
           role: 'worker'
         }
@@ -433,6 +444,7 @@ export class DataService {
       full_name: data.fullName.trim(),
       phone_number: formattedPhone,
       device_url: data.deviceUrl.trim(),
+      device_serial: deviceSerial,
       device_pin: data.devicePin.trim(),
       wallet_balance: 0,
       role: 'worker',
@@ -477,12 +489,16 @@ export class DataService {
 
           const cached = await RedisService.getCachedProfile(u.id);
 
+          const rawUrl = profileFromDb?.device_url || meta.device_url || cached?.device_url || '';
+          const deviceSerial = profileFromDb?.device_serial || meta.device_serial || cached?.device_serial || extractDeviceSerial(rawUrl);
+
           const worker: UserProfile = {
             id: u.id,
             email: u.email || cleanEmail,
             full_name: profileFromDb?.full_name || meta.full_name || cached?.full_name || 'Worker',
             phone_number: profileFromDb?.phone_number || meta.phone_number || cached?.phone_number || '',
-            device_url: profileFromDb?.device_url || meta.device_url || cached?.device_url || '',
+            device_url: rawUrl,
+            device_serial: deviceSerial,
             device_pin: profileFromDb?.device_pin || meta.device_pin || cached?.device_pin || '',
             wallet_balance: parseFloat(profileFromDb?.wallet_balance ?? cached?.wallet_balance ?? 0) || 0,
             role: 'worker',
@@ -666,6 +682,7 @@ export class DataService {
                 full_name: s.profiles.full_name,
                 phone_number: s.profiles.phone_number,
                 device_url: s.profiles.device_url,
+                device_serial: s.profiles.device_serial || extractDeviceSerial(s.profiles.device_url),
                 device_pin: s.profiles.device_pin,
                 wallet_balance: parseFloat(s.profiles.wallet_balance) || 0,
                 role: s.profiles.role,

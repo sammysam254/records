@@ -8,6 +8,7 @@ export interface UserProfile {
   full_name: string;
   phone_number: string;
   device_url: string;
+  device_serial?: string;
   device_pin: string;
   wallet_balance: number;
   role: UserRole;

@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS public.profiles (
     full_name TEXT NOT NULL,
     phone_number TEXT NOT NULL UNIQUE,
     device_url TEXT NOT NULL,
+    device_serial TEXT,
     device_pin TEXT NOT NULL,
     wallet_balance NUMERIC(12, 2) NOT NULL DEFAULT 0.00,
     role TEXT NOT NULL DEFAULT 'worker' CHECK (role IN ('worker', 'admin')),
@@ -19,6 +20,9 @@ CREATE TABLE IF NOT EXISTS public.profiles (
     created_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now()),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now())
 );
+
+-- Ensure device_serial column exists if table was created previously
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS device_serial TEXT;
 
 -- 2. WEEKLY EARNINGS SUBMISSIONS TABLE
 CREATE TABLE IF NOT EXISTS public.weekly_submissions (

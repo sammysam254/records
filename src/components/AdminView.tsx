@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import type { UserProfile, WeeklySubmission, SMSLog } from '../types';
 import { DataService } from '../services/dataService';
 import { SMSService } from '../services/smsService';
+import { extractDeviceSerial, getDeviceOpenUrl } from '../utils/deviceHelper';
 import { 
   Users, 
   CheckCircle2, 
@@ -10,18 +11,19 @@ import {
   Send, 
   ExternalLink, 
   MessageSquare, 
-  Search,
-  RefreshCw,
-  Coins,
-  Wallet,
-  LayoutGrid,
-  Table as TableIcon,
-  Copy,
-  Check,
-  Edit3,
-  X,
-  Filter,
-  ArrowUpDown
+  Search, 
+  RefreshCw, 
+  Coins, 
+  Wallet, 
+  LayoutGrid, 
+  Table as TableIcon, 
+  Copy, 
+  Check, 
+  Edit3, 
+  X, 
+  Filter, 
+  ArrowUpDown,
+  Smartphone
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
@@ -109,12 +111,23 @@ export const AdminView: React.FC<AdminViewProps> = ({
       return 0;
     });
 
+  // Copied Serial tracker
+  const [copiedSerialId, setCopiedSerialId] = useState<string | null>(null);
+
   // Copy PIN helper
   const handleCopyPin = (pin: string, id: string) => {
     navigator.clipboard.writeText(pin);
     setCopiedId(id);
     setTimeout(() => setCopiedId(null), 2000);
     onShowToast(`PIN ${pin} copied to clipboard!`);
+  };
+
+  // Copy Serial helper
+  const handleCopySerial = (serial: string, id: string) => {
+    navigator.clipboard.writeText(serial);
+    setCopiedSerialId(id);
+    setTimeout(() => setCopiedSerialId(null), 2000);
+    onShowToast(`Device Serial ${serial} copied to clipboard!`);
   };
 
   // Open Balance Adjustment Modal
@@ -642,40 +655,66 @@ export const AdminView: React.FC<AdminViewProps> = ({
                       </div>
                     </div>
 
-                    {/* Assigned Device Workstation & PIN */}
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', fontSize: '0.78rem' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                        <span style={{ color: 'var(--text-muted)', fontSize: '0.72rem' }}>Assigned Workstation:</span>
-                        {u.device_url ? (
-                          <a
-                            href={u.device_url.startsWith('http') ? u.device_url : `https://${u.device_url}`}
-                            target="_blank"
-                            rel="noreferrer"
-                            style={{ color: '#38bdf8', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}
-                          >
-                            Open Link <ExternalLink size={11} />
-                          </a>
-                        ) : (
-                          <span style={{ color: 'var(--text-dim)' }}>None</span>
-                        )}
-                      </div>
+                    {/* Assigned Device Workstation, Serial & PIN */}
+                    {(() => {
+                      const deviceSerial = u.device_serial || extractDeviceSerial(u.device_url);
+                      const openUrl = getDeviceOpenUrl(u.device_url);
+                      return (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem', fontSize: '0.78rem', background: 'rgba(255, 255, 255, 0.02)', padding: '0.65rem 0.75rem', borderRadius: '8px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                            <span style={{ color: 'var(--text-muted)', fontSize: '0.72rem', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                              <Smartphone size={12} color="#38bdf8" /> Device Serial:
+                            </span>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                              <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 800, color: '#38bdf8', background: 'rgba(56, 189, 248, 0.12)', padding: '0.15rem 0.45rem', borderRadius: '4px', letterSpacing: '0.05em' }}>
+                                {deviceSerial || 'NO-SERIAL'}
+                              </span>
+                              {deviceSerial && (
+                                <button
+                                  onClick={() => handleCopySerial(deviceSerial, `usr_card_${u.id}`)}
+                                  style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: 0 }}
+                                  title="Copy Device Serial"
+                                >
+                                  {copiedSerialId === `usr_card_${u.id}` ? <Check size={12} color="#10b981" /> : <Copy size={12} />}
+                                </button>
+                              )}
+                            </div>
+                          </div>
 
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                        <span style={{ color: 'var(--text-muted)', fontSize: '0.72rem' }}>Assigned PIN:</span>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-                          <span style={{ fontFamily: 'var(--font-mono)', background: 'rgba(255, 255, 255, 0.06)', padding: '0.15rem 0.45rem', borderRadius: '4px', letterSpacing: '0.1em' }}>
-                            {u.device_pin || '----'}
-                          </span>
-                          <button
-                            onClick={() => handleCopyPin(u.device_pin, u.id)}
-                            style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '0.2rem' }}
-                            title="Copy PIN"
-                          >
-                            {copiedId === u.id ? <Check size={12} color="#10b981" /> : <Copy size={12} />}
-                          </button>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                            <span style={{ color: 'var(--text-muted)', fontSize: '0.72rem' }}>Workstation:</span>
+                            {openUrl ? (
+                              <a
+                                href={openUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                                style={{ color: '#38bdf8', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '0.25rem', fontWeight: 600 }}
+                              >
+                                Open Workstation <ExternalLink size={11} />
+                              </a>
+                            ) : (
+                              <span style={{ color: 'var(--text-dim)' }}>None</span>
+                            )}
+                          </div>
+
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                            <span style={{ color: 'var(--text-muted)', fontSize: '0.72rem' }}>Assigned PIN:</span>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                              <span style={{ fontFamily: 'var(--font-mono)', background: 'rgba(255, 255, 255, 0.06)', padding: '0.15rem 0.45rem', borderRadius: '4px', letterSpacing: '0.1em' }}>
+                                {u.device_pin || '----'}
+                              </span>
+                              <button
+                                onClick={() => handleCopyPin(u.device_pin, u.id)}
+                                style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '0.2rem' }}
+                                title="Copy PIN"
+                              >
+                                {copiedId === u.id ? <Check size={12} color="#10b981" /> : <Copy size={12} />}
+                              </button>
+                            </div>
+                          </div>
                         </div>
-                      </div>
-                    </div>
+                      );
+                    })()}
 
                     {/* Submissions count badge & Quick Actions */}
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderTop: '1px solid var(--border-subtle)', paddingTop: '0.75rem', gap: '0.5rem' }}>
@@ -718,66 +757,86 @@ export const AdminView: React.FC<AdminViewProps> = ({
                     <th>Verified Phone</th>
                     <th>Role</th>
                     <th>Current Balance</th>
-                    <th>Assigned Device</th>
+                    <th>Device Serial &amp; Workstation</th>
                     <th>Assigned PIN</th>
                     <th>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredUsers.map(u => (
-                    <tr key={u.id}>
-                      <td>
-                        <div style={{ fontWeight: 700, fontSize: '0.92rem' }}>{u.full_name}</div>
-                        <div style={{ fontSize: '0.72rem', color: 'var(--text-dim)' }}>{u.email}</div>
-                      </td>
-                      <td>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontFamily: 'var(--font-mono)' }}>
-                          {u.phone_number}
-                          {u.phone_verified && (
-                            <span title="Phone verified via SMS">
-                              <CheckCircle2 size={13} color="#10b981" />
-                            </span>
-                          )}
-                        </div>
-                      </td>
-                      <td>
-                        <span className="badge" style={{
-                          fontSize: '0.65rem',
-                          background: u.role === 'admin' ? 'rgba(139, 92, 246, 0.2)' : 'rgba(6, 182, 212, 0.15)',
-                          color: u.role === 'admin' ? '#c4b5fd' : '#38bdf8'
-                        }}>
-                          {u.role}
-                        </span>
-                      </td>
-                      <td>
-                        <span style={{
-                          fontWeight: 800,
-                          fontSize: '1.05rem',
-                          color: (u.wallet_balance || 0) > 0 ? '#34d399' : 'var(--text-dim)'
-                        }}>
-                          ${(u.wallet_balance || 0).toFixed(2)}
-                        </span>
-                      </td>
-                      <td>
-                        {u.device_url ? (
-                          <a
-                            href={u.device_url.startsWith('http') ? u.device_url : `https://${u.device_url}`}
-                            target="_blank"
-                            rel="noreferrer"
-                            style={{ color: '#38bdf8', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.8rem' }}
-                          >
-                            {u.device_url.replace(/^https?:\/\//, '').slice(0, 22)}...
-                            <ExternalLink size={12} />
-                          </a>
-                        ) : (
-                          <span style={{ color: 'var(--text-dim)', fontSize: '0.78rem' }}>None</span>
-                        )}
-                      </td>
-                      <td>
-                        <span style={{ fontFamily: 'var(--font-mono)', background: 'rgba(255, 255, 255, 0.05)', padding: '0.2rem 0.5rem', borderRadius: '4px', letterSpacing: '0.1em' }}>
-                          {u.device_pin || '----'}
-                        </span>
-                      </td>
+                  {filteredUsers.map(u => {
+                    const deviceSerial = u.device_serial || extractDeviceSerial(u.device_url);
+                    const openUrl = getDeviceOpenUrl(u.device_url);
+
+                    return (
+                      <tr key={u.id}>
+                        <td>
+                          <div style={{ fontWeight: 700, fontSize: '0.92rem' }}>{u.full_name}</div>
+                          <div style={{ fontSize: '0.72rem', color: 'var(--text-dim)' }}>{u.email}</div>
+                        </td>
+                        <td>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontFamily: 'var(--font-mono)' }}>
+                            {u.phone_number}
+                            {u.phone_verified && (
+                              <span title="Phone verified via SMS">
+                                <CheckCircle2 size={13} color="#10b981" />
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                        <td>
+                          <span className="badge" style={{
+                            fontSize: '0.65rem',
+                            background: u.role === 'admin' ? 'rgba(139, 92, 246, 0.2)' : 'rgba(6, 182, 212, 0.15)',
+                            color: u.role === 'admin' ? '#c4b5fd' : '#38bdf8'
+                          }}>
+                            {u.role}
+                          </span>
+                        </td>
+                        <td>
+                          <span style={{
+                            fontWeight: 800,
+                            fontSize: '1.05rem',
+                            color: (u.wallet_balance || 0) > 0 ? '#34d399' : 'var(--text-dim)'
+                          }}>
+                            ${(u.wallet_balance || 0).toFixed(2)}
+                          </span>
+                        </td>
+                        <td>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                              <Smartphone size={12} color="#38bdf8" />
+                              <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 800, color: '#38bdf8', fontSize: '0.8rem', background: 'rgba(56, 189, 248, 0.12)', padding: '0.1rem 0.35rem', borderRadius: '4px' }}>
+                                {deviceSerial || 'NO-SERIAL'}
+                              </span>
+                              {deviceSerial && (
+                                <button
+                                  onClick={() => handleCopySerial(deviceSerial, `usr_tbl_${u.id}`)}
+                                  style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: 0 }}
+                                  title="Copy Serial"
+                                >
+                                  {copiedSerialId === `usr_tbl_${u.id}` ? <Check size={11} color="#10b981" /> : <Copy size={11} />}
+                                </button>
+                              )}
+                            </div>
+                            {openUrl ? (
+                              <a
+                                href={openUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                                style={{ color: '#38bdf8', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '0.25rem', fontSize: '0.74rem', fontWeight: 600 }}
+                              >
+                                Open Workstation <ExternalLink size={10} />
+                              </a>
+                            ) : (
+                              <span style={{ color: 'var(--text-dim)', fontSize: '0.72rem' }}>None</span>
+                            )}
+                          </div>
+                        </td>
+                        <td>
+                          <span style={{ fontFamily: 'var(--font-mono)', background: 'rgba(255, 255, 255, 0.05)', padding: '0.2rem 0.5rem', borderRadius: '4px', letterSpacing: '0.1em' }}>
+                            {u.device_pin || '----'}
+                          </span>
+                        </td>
                       <td>
                         <div style={{ display: 'flex', gap: '0.4rem' }}>
                           <button
@@ -810,7 +869,8 @@ export const AdminView: React.FC<AdminViewProps> = ({
                         </div>
                       </td>
                     </tr>
-                  ))}
+                  );
+                })}
                 </tbody>
               </table>
             </div>
@@ -863,69 +923,149 @@ export const AdminView: React.FC<AdminViewProps> = ({
             <>
               {/* Responsive Cards on Mobile */}
               <div className="show-on-mobile" style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
-                {filteredSubmissions.map(sub => (
-                  <div key={sub.id} className="user-card" style={{ padding: '1.15rem' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                      <div>
-                        <div style={{ fontWeight: 800, fontSize: '1rem' }}>{sub.user?.full_name || 'Worker'}</div>
-                        <div style={{ fontSize: '0.72rem', color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>
-                          {sub.user?.phone_number} • Week of {sub.week_date}
+                {filteredSubmissions.map(sub => {
+                  const worker = sub.user || workers.find(u => u.id === sub.user_id);
+                  const rawDeviceUrl = worker?.device_url || '';
+                  const deviceSerial = worker?.device_serial || extractDeviceSerial(rawDeviceUrl);
+                  const openUrl = getDeviceOpenUrl(rawDeviceUrl);
+                  const devicePin = worker?.device_pin || '';
+
+                  return (
+                    <div key={sub.id} className="user-card" style={{ padding: '1.15rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                        <div>
+                          <div style={{ fontWeight: 800, fontSize: '1rem' }}>{worker?.full_name || 'Worker'}</div>
+                          <div style={{ fontSize: '0.72rem', color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>
+                            {worker?.phone_number || 'No Phone'} • Week of {sub.week_date}
+                          </div>
+                        </div>
+
+                        {sub.status === 'pending' && <span className="badge badge-pending">Pending</span>}
+                        {sub.status === 'approved' && <span className="badge badge-approved">Approved</span>}
+                        {sub.status === 'paid' && <span className="badge badge-paid">Paid</span>}
+                        {sub.status === 'rejected' && <span className="badge badge-rejected">Rejected</span>}
+                      </div>
+
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', background: 'rgba(255,255,255,0.02)', padding: '0.75rem', borderRadius: '10px' }}>
+                        <div>
+                          <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Submitted Amount</span>
+                          <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#f8fafc' }}>
+                            ${sub.amount_made.toFixed(2)}
+                          </div>
+                        </div>
+                        <div>
+                          <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Calculated Credit</span>
+                          <div style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--accent-emerald)' }}>
+                            +${sub.calculated_credit.toFixed(2)}
+                          </div>
                         </div>
                       </div>
 
-                      {sub.status === 'pending' && <span className="badge badge-pending">Pending</span>}
-                      {sub.status === 'approved' && <span className="badge badge-approved">Approved</span>}
-                      {sub.status === 'paid' && <span className="badge badge-paid">Paid</span>}
-                      {sub.status === 'rejected' && <span className="badge badge-rejected">Rejected</span>}
-                    </div>
+                      {/* Device Verification Panel */}
+                      <div style={{
+                        background: 'rgba(56, 189, 248, 0.05)',
+                        border: '1px solid rgba(56, 189, 248, 0.18)',
+                        borderRadius: '10px',
+                        padding: '0.75rem',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '0.45rem'
+                      }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.35rem' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                            <Smartphone size={13} color="#38bdf8" />
+                            <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 600 }}>Device Serial:</span>
+                            <span style={{
+                              fontFamily: 'var(--font-mono)',
+                              fontWeight: 800,
+                              color: '#38bdf8',
+                              fontSize: '0.8rem',
+                              background: 'rgba(56, 189, 248, 0.15)',
+                              padding: '0.1rem 0.4rem',
+                              borderRadius: '4px'
+                            }}>
+                              {deviceSerial || 'NO-SERIAL'}
+                            </span>
+                            {deviceSerial && (
+                              <button
+                                onClick={() => handleCopySerial(deviceSerial, `sub_mob_${sub.id}`)}
+                                style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '0.1rem' }}
+                                title="Copy Serial"
+                              >
+                                {copiedSerialId === `sub_mob_${sub.id}` ? <Check size={12} color="#10b981" /> : <Copy size={12} />}
+                              </button>
+                            )}
+                          </div>
 
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', background: 'rgba(255,255,255,0.02)', padding: '0.75rem', borderRadius: '10px' }}>
-                      <div>
-                        <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Submitted Amount</span>
-                        <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#f8fafc' }}>
-                          ${sub.amount_made.toFixed(2)}
+                          {devicePin && (
+                            <div style={{ fontSize: '0.72rem', color: 'var(--text-dim)' }}>
+                              PIN: <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, color: '#f8fafc' }}>{devicePin}</span>
+                            </div>
+                          )}
                         </div>
+
+                        {openUrl ? (
+                          <a
+                            href={openUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              gap: '0.45rem',
+                              fontSize: '0.78rem',
+                              fontWeight: 700,
+                              color: '#38bdf8',
+                              border: '1px solid rgba(56, 189, 248, 0.3)',
+                              background: 'rgba(56, 189, 248, 0.12)',
+                              padding: '0.45rem 0.75rem',
+                              borderRadius: '7px',
+                              textDecoration: 'none'
+                            }}
+                          >
+                            <ExternalLink size={13} /> Open Device ({deviceSerial || 'Stream'}) to Verify Claim
+                          </a>
+                        ) : (
+                          <div style={{ fontSize: '0.72rem', color: 'var(--text-dim)', fontStyle: 'italic' }}>
+                            No device stream URL registered for this worker
+                          </div>
+                        )}
                       </div>
-                      <div>
-                        <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Calculated Credit</span>
-                        <div style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--accent-emerald)' }}>
-                          +${sub.calculated_credit.toFixed(2)}
-                        </div>
+
+                      {/* Action buttons */}
+                      <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.15rem' }}>
+                        {sub.status === 'pending' && (
+                          <button
+                            onClick={() => handleApprove(sub)}
+                            disabled={isProcessing === sub.id}
+                            className="btn-success"
+                            style={{ width: '100%', justifyContent: 'center', fontSize: '0.82rem' }}
+                          >
+                            <CheckCircle2 size={15} /> Approve &amp; Credit Wallet
+                          </button>
+                        )}
+
+                        {sub.status === 'approved' && (
+                          <button
+                            onClick={() => handleMarkAsPaid(sub)}
+                            disabled={isProcessing === sub.id}
+                            className="btn-primary"
+                            style={{ width: '100%', justifyContent: 'center', fontSize: '0.82rem' }}
+                          >
+                            <DollarSign size={15} /> Mark as Paid (Deduct)
+                          </button>
+                        )}
+
+                        {sub.status === 'paid' && (
+                          <div style={{ fontSize: '0.8rem', color: 'var(--accent-emerald)', display: 'flex', alignItems: 'center', gap: '0.4rem', margin: '0 auto' }}>
+                            <CheckCircle2 size={16} /> Disbursed &amp; Deducted
+                          </div>
+                        )}
                       </div>
                     </div>
-
-                    {/* Action buttons */}
-                    <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.25rem' }}>
-                      {sub.status === 'pending' && (
-                        <button
-                          onClick={() => handleApprove(sub)}
-                          disabled={isProcessing === sub.id}
-                          className="btn-success"
-                          style={{ width: '100%', justifyContent: 'center', fontSize: '0.82rem' }}
-                        >
-                          <CheckCircle2 size={15} /> Approve &amp; Credit Wallet
-                        </button>
-                      )}
-
-                      {sub.status === 'approved' && (
-                        <button
-                          onClick={() => handleMarkAsPaid(sub)}
-                          disabled={isProcessing === sub.id}
-                          className="btn-primary"
-                          style={{ width: '100%', justifyContent: 'center', fontSize: '0.82rem' }}
-                        >
-                          <DollarSign size={15} /> Mark as Paid (Deduct)
-                        </button>
-                      )}
-
-                      {sub.status === 'paid' && (
-                        <div style={{ fontSize: '0.8rem', color: 'var(--accent-emerald)', display: 'flex', alignItems: 'center', gap: '0.4rem', margin: '0 auto' }}>
-                          <CheckCircle2 size={16} /> Disbursed &amp; Deducted
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
 
               {/* Table on Tablet / Desktop */}
@@ -934,6 +1074,7 @@ export const AdminView: React.FC<AdminViewProps> = ({
                   <thead>
                     <tr>
                       <th>Worker &amp; Phone</th>
+                      <th>Device &amp; Verification</th>
                       <th>Week Date</th>
                       <th>Submitted Amount</th>
                       <th>Calculated Credit</th>
@@ -942,74 +1083,136 @@ export const AdminView: React.FC<AdminViewProps> = ({
                     </tr>
                   </thead>
                   <tbody>
-                    {filteredSubmissions.map(sub => (
-                      <tr key={sub.id}>
-                        <td>
-                          <div style={{ fontWeight: 700, fontSize: '0.92rem' }}>{sub.user?.full_name || 'Worker'}</div>
-                          <div style={{ fontSize: '0.72rem', color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>
-                            {sub.user?.phone_number}
-                          </div>
-                        </td>
-                        <td>
-                          <div style={{ fontWeight: 600 }}>{sub.week_date}</div>
-                          <div style={{ fontSize: '0.7rem', color: 'var(--text-dim)' }}>
-                            {new Date(sub.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                          </div>
-                        </td>
-                        <td>
-                          <span style={{ fontWeight: 800, fontSize: '1.05rem', color: '#f8fafc' }}>
-                            ${sub.amount_made.toFixed(2)}
-                          </span>
-                        </td>
-                        <td>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                            <span style={{ fontWeight: 800, color: 'var(--accent-emerald)', fontSize: '1rem' }}>
-                              +${sub.calculated_credit.toFixed(2)}
-                            </span>
-                            <span className="badge" style={{ fontSize: '0.65rem' }}>
-                              {sub.amount_made <= 40 ? '≤$40 ($0)' : sub.amount_made <= 80 ? '$40-$80' : '>$80'}
-                            </span>
-                          </div>
-                        </td>
-                        <td>
-                          {sub.status === 'pending' && <span className="badge badge-pending">Pending</span>}
-                          {sub.status === 'approved' && <span className="badge badge-approved">Approved</span>}
-                          {sub.status === 'paid' && <span className="badge badge-paid">Paid</span>}
-                          {sub.status === 'rejected' && <span className="badge badge-rejected">Rejected</span>}
-                        </td>
-                        <td>
-                          <div style={{ display: 'flex', gap: '0.45rem' }}>
-                            {sub.status === 'pending' && (
-                              <button
-                                onClick={() => handleApprove(sub)}
-                                disabled={isProcessing === sub.id}
-                                className="btn-success"
-                                style={{ padding: '0.4rem 0.75rem', fontSize: '0.75rem' }}
-                              >
-                                <CheckCircle2 size={13} /> Approve
-                              </button>
-                            )}
+                    {filteredSubmissions.map(sub => {
+                      const worker = sub.user || workers.find(u => u.id === sub.user_id);
+                      const rawDeviceUrl = worker?.device_url || '';
+                      const deviceSerial = worker?.device_serial || extractDeviceSerial(rawDeviceUrl);
+                      const openUrl = getDeviceOpenUrl(rawDeviceUrl);
+                      const devicePin = worker?.device_pin || '';
 
-                            {sub.status === 'approved' && (
-                              <button
-                                onClick={() => handleMarkAsPaid(sub)}
-                                disabled={isProcessing === sub.id}
-                                className="btn-primary"
-                                style={{ padding: '0.4rem 0.75rem', fontSize: '0.75rem' }}
-                              >
-                                <DollarSign size={13} /> Mark Paid
-                              </button>
-                            )}
+                      return (
+                        <tr key={sub.id}>
+                          <td>
+                            <div style={{ fontWeight: 700, fontSize: '0.92rem' }}>{worker?.full_name || 'Worker'}</div>
+                            <div style={{ fontSize: '0.72rem', color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>
+                              {worker?.phone_number || 'No phone'}
+                            </div>
+                          </td>
+                          <td>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                                <Smartphone size={12} color="#38bdf8" />
+                                <span style={{
+                                  fontFamily: 'var(--font-mono)',
+                                  fontWeight: 800,
+                                  color: '#38bdf8',
+                                  fontSize: '0.8rem',
+                                  background: 'rgba(56, 189, 248, 0.12)',
+                                  padding: '0.1rem 0.35rem',
+                                  borderRadius: '4px'
+                                }}>
+                                  {deviceSerial || 'NO-SERIAL'}
+                                </span>
+                                {deviceSerial && (
+                                  <button
+                                    onClick={() => handleCopySerial(deviceSerial, `sub_tbl_${sub.id}`)}
+                                    style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: 0 }}
+                                    title="Copy Device Serial"
+                                  >
+                                    {copiedSerialId === `sub_tbl_${sub.id}` ? <Check size={11} color="#10b981" /> : <Copy size={11} />}
+                                  </button>
+                                )}
+                              </div>
 
-                            {sub.status === 'paid' && (
-                              <span style={{ fontSize: '0.75rem', color: 'var(--accent-emerald)', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
-                                <CheckCircle2 size={13} /> Paid
+                              {openUrl ? (
+                                <a
+                                  href={openUrl}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  style={{
+                                    color: '#38bdf8',
+                                    textDecoration: 'none',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '0.3rem',
+                                    fontSize: '0.74rem',
+                                    fontWeight: 700,
+                                    background: 'rgba(56, 189, 248, 0.08)',
+                                    border: '1px solid rgba(56, 189, 248, 0.22)',
+                                    padding: '0.2rem 0.45rem',
+                                    borderRadius: '5px',
+                                    width: 'fit-content'
+                                  }}
+                                  title="Open real device stream in new tab to verify claim"
+                                >
+                                  <ExternalLink size={11} /> Open Device <span style={{ opacity: 0.7, fontSize: '0.68rem' }}>({devicePin ? `PIN: ${devicePin}` : 'Stream'})</span>
+                                </a>
+                              ) : (
+                                <span style={{ color: 'var(--text-dim)', fontSize: '0.72rem' }}>No URL</span>
+                              )}
+                            </div>
+                          </td>
+                          <td>
+                            <div style={{ fontWeight: 600 }}>{sub.week_date}</div>
+                            <div style={{ fontSize: '0.7rem', color: 'var(--text-dim)' }}>
+                              {new Date(sub.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </div>
+                          </td>
+                          <td>
+                            <span style={{ fontWeight: 800, fontSize: '1.05rem', color: '#f8fafc' }}>
+                              ${sub.amount_made.toFixed(2)}
+                            </span>
+                          </td>
+                          <td>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                              <span style={{ fontWeight: 800, color: 'var(--accent-emerald)', fontSize: '1rem' }}>
+                                +${sub.calculated_credit.toFixed(2)}
                               </span>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
+                              <span className="badge" style={{ fontSize: '0.65rem' }}>
+                                {sub.amount_made <= 40 ? '≤$40 ($0)' : sub.amount_made <= 80 ? '$40-$80' : '>$80'}
+                              </span>
+                            </div>
+                          </td>
+                          <td>
+                            {sub.status === 'pending' && <span className="badge badge-pending">Pending</span>}
+                            {sub.status === 'approved' && <span className="badge badge-approved">Approved</span>}
+                            {sub.status === 'paid' && <span className="badge badge-paid">Paid</span>}
+                            {sub.status === 'rejected' && <span className="badge badge-rejected">Rejected</span>}
+                          </td>
+                          <td>
+                            <div style={{ display: 'flex', gap: '0.45rem' }}>
+                              {sub.status === 'pending' && (
+                                <button
+                                  onClick={() => handleApprove(sub)}
+                                  disabled={isProcessing === sub.id}
+                                  className="btn-success"
+                                  style={{ padding: '0.4rem 0.75rem', fontSize: '0.75rem' }}
+                                >
+                                  <CheckCircle2 size={13} /> Approve
+                                </button>
+                              )}
+
+                              {sub.status === 'approved' && (
+                                <button
+                                  onClick={() => handleMarkAsPaid(sub)}
+                                  disabled={isProcessing === sub.id}
+                                  className="btn-primary"
+                                  style={{ padding: '0.4rem 0.75rem', fontSize: '0.75rem' }}
+                                >
+                                  <DollarSign size={13} /> Mark Paid
+                                </button>
+                              )}
+
+                              {sub.status === 'paid' && (
+                                <span style={{ fontSize: '0.75rem', color: 'var(--accent-emerald)', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                                  <CheckCircle2 size={13} /> Paid
+                                </span>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>

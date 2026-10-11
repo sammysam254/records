@@ -1,6 +1,29 @@
 import type { Context } from "@netlify/functions";
 import { createClient } from "@supabase/supabase-js";
 
+// Helper to extract device serial from workstation URL
+function extractDeviceSerial(raw: string | null | undefined): string {
+  if (!raw) return '';
+  const str = String(raw).trim();
+  const tokenRMatch = str.match(/token=[^&]*?:([rR][a-zA-Z0-9_-]+)/i);
+  if (tokenRMatch && tokenRMatch[1]) {
+    const candidate = tokenRMatch[1].split(':')[0].split('&')[0].split('#')[0];
+    if (candidate) return candidate.toUpperCase();
+  }
+  const udidMatch = str.match(/[?&#]udid=([a-zA-Z0-9_-]+)/i) || str.match(/udid%3D([a-zA-Z0-9_-]+)/i);
+  if (udidMatch && udidMatch[1]) {
+    return udidMatch[1].split('&')[0].toUpperCase();
+  }
+  const generalTokenMatch = str.match(/token=([a-zA-Z0-9]+):([a-zA-Z0-9_-]+)/i);
+  if (generalTokenMatch && generalTokenMatch[2]) {
+    const candidate = generalTokenMatch[2].split(':')[0].split('&')[0].split('#')[0];
+    if (candidate) return candidate.toUpperCase();
+  }
+  const standaloneR = str.match(/\b([rR][a-zA-Z0-9]{8,15})\b/);
+  if (standaloneR && standaloneR[1]) return standaloneR[1].toUpperCase();
+  return '';
+}
+
 export default async (req: Request, _context: Context) => {
   // CORS Preflight
   if (req.method === "OPTIONS") {
@@ -57,12 +80,16 @@ export default async (req: Request, _context: Context) => {
         .map((p: any) => {
           const authUser = userMap.get(p.id);
           const meta = authUser?.user_metadata || {};
+          const rawUrl = p.device_url || meta.device_url || "";
+          const deviceSerial = p.device_serial || meta.device_serial || extractDeviceSerial(rawUrl);
+
           return {
             id: p.id,
             email: authUser?.email || p.email || "",
             full_name: p.full_name || meta.full_name || "Worker",
             phone_number: p.phone_number || meta.phone_number || "",
-            device_url: p.device_url || meta.device_url || "",
+            device_url: rawUrl,
+            device_serial: deviceSerial,
             device_pin: p.device_pin || meta.device_pin || "",
             wallet_balance: parseFloat(p.wallet_balance) || 0,
             role: p.role || "worker",
@@ -111,12 +138,16 @@ export default async (req: Request, _context: Context) => {
           .single();
 
         const meta = authUser.user_metadata || {};
+        const rawUrl = profile?.device_url || meta.device_url || "";
+        const deviceSerial = profile?.device_serial || meta.device_serial || extractDeviceSerial(rawUrl);
+
         const worker = {
           id: authUser.id,
           email: authUser.email,
           full_name: profile?.full_name || meta.full_name || "Worker",
           phone_number: profile?.phone_number || meta.phone_number || "",
-          device_url: profile?.device_url || meta.device_url || "",
+          device_url: rawUrl,
+          device_serial: deviceSerial,
           device_pin: profile?.device_pin || meta.device_pin || "",
           wallet_balance: parseFloat(profile?.wallet_balance || 0),
           role: profile?.role || "worker",
@@ -144,6 +175,7 @@ export default async (req: Request, _context: Context) => {
 
         const cleanEmail = (email || "").toLowerCase().trim();
         const formattedPhone = phoneNumber;
+        const deviceSerial = extractDeviceSerial(deviceUrl);
 
         // Check if user already exists
         const { data: allUsers } = await sbAdmin.auth.admin.listUsers();
@@ -162,6 +194,7 @@ export default async (req: Request, _context: Context) => {
               full_name: fullName,
               phone_number: formattedPhone,
               device_url: deviceUrl,
+              device_serial: deviceSerial,
               device_pin: devicePin,
               role: "worker",
             },
@@ -199,6 +232,7 @@ export default async (req: Request, _context: Context) => {
           full_name: fullName,
           phone_number: formattedPhone,
           device_url: deviceUrl,
+          device_serial: deviceSerial,
           device_pin: devicePin,
           wallet_balance: 0,
           role: "worker",

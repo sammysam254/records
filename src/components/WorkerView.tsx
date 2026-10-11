@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import type { UserProfile, WeeklySubmission } from '../types';
 import { getCalculationBreakdown } from '../utils/calculator';
+import { extractDeviceSerial } from '../utils/deviceHelper';
 import { DataService } from '../services/dataService';
 import { 
   Wallet, 
@@ -39,6 +40,7 @@ export const WorkerView: React.FC<WorkerViewProps> = ({
   const [amountInput, setAmountInput] = useState<string>('');
   const [showPin, setShowPin] = useState(false);
   const [copiedPin, setCopiedPin] = useState(false);
+  const [copiedSerial, setCopiedSerial] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Filter submissions for this worker (or empty if visitor)
@@ -59,6 +61,14 @@ export const WorkerView: React.FC<WorkerViewProps> = ({
     setCopiedPin(true);
     setTimeout(() => setCopiedPin(false), 2000);
     onShowToast(`PIN ${worker.device_pin} copied to clipboard!`);
+  };
+
+  // Copy Serial helper
+  const handleCopySerial = (serial: string) => {
+    navigator.clipboard.writeText(serial);
+    setCopiedSerial(true);
+    setTimeout(() => setCopiedSerial(false), 2000);
+    onShowToast(`Device Serial ${serial} copied to clipboard!`);
   };
 
   // Open Assigned Device URL in a new tab
@@ -292,18 +302,52 @@ export const WorkerView: React.FC<WorkerViewProps> = ({
               </div>
               <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-muted)' }}>Assigned Workstation</span>
             </div>
-            <span className="badge" style={{ background: 'rgba(139, 92, 246, 0.15)', color: '#c4b5fd', fontSize: '0.68rem' }}>
-              Workstation
-            </span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              {worker && (worker.device_serial || extractDeviceSerial(worker.device_url)) && (
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.35rem',
+                  background: 'rgba(56, 189, 248, 0.12)',
+                  border: '1px solid rgba(56, 189, 248, 0.3)',
+                  padding: '0.2rem 0.5rem',
+                  borderRadius: '6px',
+                  fontSize: '0.75rem',
+                  color: '#38bdf8',
+                  fontFamily: 'var(--font-mono)',
+                  fontWeight: 700
+                }}>
+                  <Smartphone size={12} />
+                  <span>{worker.device_serial || extractDeviceSerial(worker.device_url)}</span>
+                  <button
+                    onClick={() => handleCopySerial(worker.device_serial || extractDeviceSerial(worker.device_url))}
+                    style={{ background: 'none', border: 'none', color: 'inherit', cursor: 'pointer', padding: 0, display: 'flex' }}
+                    title="Copy Device Serial"
+                  >
+                    {copiedSerial ? <Check size={12} color="#10b981" /> : <Copy size={12} />}
+                  </button>
+                </div>
+              )}
+              <span className="badge" style={{ background: 'rgba(139, 92, 246, 0.15)', color: '#c4b5fd', fontSize: '0.68rem' }}>
+                Workstation
+              </span>
+            </div>
           </div>
 
           {worker ? (
             <>
-              {/* Assigned Device URL Box */}
+              {/* Assigned Device Serial & URL Box */}
               <div style={{ marginBottom: '1rem' }}>
-                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '0.35rem', textTransform: 'uppercase' }}>
-                  Device URL
-                </label>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem' }}>
+                  <label style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
+                    Device Stream URL
+                  </label>
+                  {(worker.device_serial || extractDeviceSerial(worker.device_url)) && (
+                    <span style={{ fontSize: '0.72rem', color: '#38bdf8' }}>
+                      Serial: <strong>{worker.device_serial || extractDeviceSerial(worker.device_url)}</strong>
+                    </span>
+                  )}
+                </div>
                 <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
                   <input
                     type="text"
