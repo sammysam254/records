@@ -19,159 +19,154 @@ export const ADMIN_PROFILE: UserProfile = {
   created_at: new Date().toISOString()
 };
 
-const SEED_WORKERS: UserProfile[] = [
-  {
-    id: 'usr_samson_01',
-    email: 'samson@records.io',
-    full_name: 'Samson Matata Mwinzi',
-    phone_number: '254712345678',
-    device_url: 'https://workstation.cloud/device/sm-7701',
-    device_pin: '8492',
-    wallet_balance: 65.0,
-    role: 'worker',
-    phone_verified: true,
-    created_at: new Date(Date.now() - 30 * 86400000).toISOString()
-  },
-  {
-    id: 'usr_faith_02',
-    email: 'faith@records.io',
-    full_name: 'Faith Achieng Ouma',
-    phone_number: '254722998877',
-    device_url: 'https://workstation.cloud/device/fo-9912',
-    device_pin: '3150',
-    wallet_balance: 40.0,
-    role: 'worker',
-    phone_verified: true,
-    created_at: new Date(Date.now() - 20 * 86400000).toISOString()
-  },
-  {
-    id: 'usr_kevin_03',
-    email: 'kevin@records.io',
-    full_name: 'Kevin Kiprono Bett',
-    phone_number: '254799112233',
-    device_url: 'https://workstation.cloud/device/kb-4421',
-    device_pin: '7741',
-    wallet_balance: 0.0,
-    role: 'worker',
-    phone_verified: true,
-    created_at: new Date(Date.now() - 10 * 86400000).toISOString()
-  }
-];
+// ─── Storage Keys ───────────────────────────────────────────
+const KEY_WORKERS     = 'records_workers_db';
+const KEY_SUBMISSIONS = 'records_submissions_db';
+const KEY_CURRENT     = 'records_active_user';
 
-const SEED_SUBMISSIONS: WeeklySubmission[] = [
-  {
-    id: 'sub_001',
-    user_id: 'usr_samson_01',
-    amount_made: 110.0,
-    calculated_credit: 55.0, // 40 + (110 - 80)/2 = 40 + 15 = 55
-    status: 'pending',
-    week_date: new Date().toISOString().split('T')[0],
-    created_at: new Date().toISOString()
-  },
-  {
-    id: 'sub_002',
-    user_id: 'usr_faith_02',
-    amount_made: 65.0,
-    calculated_credit: 25.0, // 65 - 40 = 25
-    status: 'pending',
-    week_date: new Date().toISOString().split('T')[0],
-    created_at: new Date().toISOString()
-  },
-  {
-    id: 'sub_003',
-    user_id: 'usr_kevin_03',
-    amount_made: 35.0,
-    calculated_credit: 0.0, // <= 40 => 0
-    status: 'pending',
-    week_date: new Date().toISOString().split('T')[0],
-    created_at: new Date().toISOString()
-  }
-];
+// ─── Helpers ─────────────────────────────────────────────────
+function localWorkers(): UserProfile[] {
+  try { return JSON.parse(localStorage.getItem(KEY_WORKERS) || '[]'); } catch { return []; }
+}
+function saveLocalWorkers(list: UserProfile[]) {
+  localStorage.setItem(KEY_WORKERS, JSON.stringify(list));
+}
+function localSubmissions(): WeeklySubmission[] {
+  try { return JSON.parse(localStorage.getItem(KEY_SUBMISSIONS) || '[]'); } catch { return []; }
+}
+function saveLocalSubmissions(list: WeeklySubmission[]) {
+  localStorage.setItem(KEY_SUBMISSIONS, JSON.stringify(list));
+}
 
 export class DataService {
-  private static STORAGE_KEY_WORKERS = 'records_workers_db';
-  private static STORAGE_KEY_SUBMISSIONS = 'records_submissions_db';
-  private static STORAGE_KEY_CURRENT_USER = 'records_active_user';
-
-  // Initialize data store from Redis or seeds
-  public static async init(): Promise<void> {
-    const rawWorkers = localStorage.getItem(this.STORAGE_KEY_WORKERS);
-    if (!rawWorkers) {
-      localStorage.setItem(this.STORAGE_KEY_WORKERS, JSON.stringify(SEED_WORKERS));
-      for (const w of SEED_WORKERS) {
-        await RedisService.cacheProfile(w);
-      }
-    }
-
-    const rawSubmissions = localStorage.getItem(this.STORAGE_KEY_SUBMISSIONS);
-    if (!rawSubmissions) {
-      localStorage.setItem(this.STORAGE_KEY_SUBMISSIONS, JSON.stringify(SEED_SUBMISSIONS));
-      await RedisService.cacheSubmissions(SEED_SUBMISSIONS);
-    }
-  }
-
-  // Get active session
+  // ─── Session ──────────────────────────────────────────────
   public static getCurrentUser(): UserProfile | null {
-    const raw = localStorage.getItem(this.STORAGE_KEY_CURRENT_USER);
-    if (!raw) return SEED_WORKERS[0]; // Default to Samson for instant preview
-    return JSON.parse(raw);
+    try {
+      const raw = localStorage.getItem(KEY_CURRENT);
+      return raw ? JSON.parse(raw) : null;
+    } catch { return null; }
   }
 
   public static setCurrentUser(user: UserProfile | null): void {
     if (user) {
-      localStorage.setItem(this.STORAGE_KEY_CURRENT_USER, JSON.stringify(user));
+      localStorage.setItem(KEY_CURRENT, JSON.stringify(user));
     } else {
-      localStorage.removeItem(this.STORAGE_KEY_CURRENT_USER);
+      localStorage.removeItem(KEY_CURRENT);
     }
   }
 
-  // Check if a user is the authorized administrator
   public static isAdmin(user: UserProfile | null): boolean {
     return Boolean(user && user.email.toLowerCase() === ADMIN_EMAIL.toLowerCase());
   }
 
-  // Get all workers (served from Redis or local store)
-  public static async getWorkers(): Promise<UserProfile[]> {
-    const raw = localStorage.getItem(this.STORAGE_KEY_WORKERS);
-    return raw ? JSON.parse(raw) : SEED_WORKERS;
+  // ─── Init ─────────────────────────────────────────────────
+  public static async init(): Promise<void> {
+    // Nothing to seed — data lives in Supabase. localStorage is just a session cache.
   }
 
-  // Get single worker
+  // ─── GET WORKERS ──────────────────────────────────────────
+  // Primary: Netlify workers function (Supabase Admin), Fallback: Supabase direct & Redis/local.
+  public static async getWorkers(): Promise<UserProfile[]> {
+    // 1. Try serverless function (bypasses RLS recursion using Supabase admin)
+    try {
+      const resp = await fetch('/.netlify/functions/workers');
+      if (resp.ok) {
+        const workers: UserProfile[] = await resp.json();
+        if (Array.isArray(workers) && workers.length > 0) {
+          saveLocalWorkers(workers);
+          return workers;
+        }
+      }
+    } catch {
+      // Offline / local fallback
+    }
+
+    // 2. Direct Supabase query
+    const supabase = getSupabase();
+    if (supabase) {
+      try {
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('role', 'worker')
+          .order('created_at', { ascending: false });
+
+        if (!error && data && data.length > 0) {
+          const workers: UserProfile[] = data.map((r: any) => ({
+            id: r.id,
+            email: r.email || '',
+            full_name: r.full_name,
+            phone_number: r.phone_number,
+            device_url: r.device_url,
+            device_pin: r.device_pin,
+            wallet_balance: parseFloat(r.wallet_balance) || 0,
+            role: r.role,
+            phone_verified: r.phone_verified,
+            created_at: r.created_at
+          }));
+          saveLocalWorkers(workers);
+          return workers;
+        }
+      } catch (err) {
+        console.warn('Supabase getWorkers query error:', err);
+      }
+    }
+
+    // 3. Fallback to localStorage cache
+    return localWorkers();
+  }
+
+  // ─── GET SINGLE WORKER ────────────────────────────────────
   public static async getWorkerById(id: string): Promise<UserProfile | null> {
     if (id === ADMIN_PROFILE.id) return ADMIN_PROFILE;
+
+    const supabase = getSupabase();
+    if (supabase) {
+      try {
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', id)
+          .single();
+
+        if (!error && data) {
+          return {
+            id: data.id,
+            email: data.email || '',
+            full_name: data.full_name,
+            phone_number: data.phone_number,
+            device_url: data.device_url,
+            device_pin: data.device_pin,
+            wallet_balance: parseFloat(data.wallet_balance) || 0,
+            role: data.role,
+            phone_verified: data.phone_verified,
+            created_at: data.created_at
+          };
+        }
+      } catch (err) {
+        console.warn('Supabase getWorkerById failed:', err);
+      }
+    }
+
     const cached = await RedisService.getCachedProfile(id);
     if (cached) return cached;
-
-    const workers = await this.getWorkers();
-    const worker = workers.find(w => w.id === id) || null;
-    if (worker) {
-      await RedisService.cacheProfile(worker);
-    }
-    return worker;
+    return localWorkers().find(w => w.id === id) || null;
   }
 
-  // Send Registration SMS OTP (Real TextSMS dispatch, code is NOT returned)
+  // ─── SEND REGISTRATION OTP ────────────────────────────────
   public static async sendRegistrationOTP(phoneNumber: string, fullName: string): Promise<{ success: boolean; message: string }> {
-    const formatted = formatKenyanPhone(phoneNumber);
-    
-    // Validate format before hitting the API
     if (!isValidKenyanPhone(phoneNumber)) {
-      return { 
-        success: false, 
-        message: `Invalid phone number: "${phoneNumber}". Please enter a valid Kenyan number like 0706499848 or 254706499848.` 
+      return {
+        success: false,
+        message: `Invalid phone number: "${phoneNumber}". Please enter a valid Kenyan number like 0706499848.`
       };
     }
 
-    // Generate 6-digit random code
+    const formatted = formatKenyanPhone(phoneNumber);
     const code = Math.floor(100000 + Math.random() * 900000).toString();
-    
-    // Store in Redis (10 minutes TTL)
     await RedisService.storeOTP(formatted, code);
 
-    // Prepare customized message starting with "Hello {fullName}"
     const message = SMSTemplates.otp(fullName || 'User', code);
-
-    // Real SMS dispatch via TextSMS Kenya
     const smsRes = await SMSService.sendSMS({
       mobile: formatted,
       recipientName: fullName || 'User',
@@ -180,25 +175,19 @@ export class DataService {
     });
 
     if (!smsRes.success) {
-      return {
-        success: false,
-        message: smsRes.description || 'Failed to dispatch SMS through TextSMS Kenya.'
-      };
+      return { success: false, message: smsRes.description || 'Failed to send verification SMS.' };
     }
 
-    return {
-      success: true,
-      message: `Verification code successfully sent via SMS to ${formatted}.`
-    };
+    return { success: true, message: `Verification code sent to ${formatted}.` };
   }
 
-  // Verify Registration OTP
+  // ─── VERIFY REGISTRATION OTP ──────────────────────────────
   public static async verifyRegistrationOTP(phoneNumber: string, code: string): Promise<boolean> {
     const formatted = formatKenyanPhone(phoneNumber);
     return await RedisService.verifyOTP(formatted, code);
   }
 
-  // Register Worker
+  // ─── REGISTER WORKER (Supabase Auth + Profile) ────────────
   public static async registerWorker(data: {
     fullName: string;
     phoneNumber: string;
@@ -208,74 +197,223 @@ export class DataService {
     devicePin: string;
     isPhoneVerified: boolean;
   }): Promise<{ success: boolean; worker?: UserProfile; error?: string }> {
-    const workers = await this.getWorkers();
+    const supabase = getSupabase();
     const formattedPhone = formatKenyanPhone(data.phoneNumber);
+    const cleanEmail = data.email.toLowerCase().trim();
+    const password = data.password || 'password123';
 
-    if (workers.some(w => w.phone_number === formattedPhone)) {
-      return { success: false, error: 'A worker with this phone number is already registered.' };
+    // 1. Try serverless function registration (securely registers via Supabase Admin)
+    try {
+      const resp = await fetch('/.netlify/functions/workers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'register',
+          email: cleanEmail,
+          password: password,
+          fullName: data.fullName.trim(),
+          phoneNumber: formattedPhone,
+          deviceUrl: data.deviceUrl.trim(),
+          devicePin: data.devicePin.trim(),
+          isPhoneVerified: data.isPhoneVerified
+        })
+      });
+
+      if (resp.ok) {
+        const result = await resp.json();
+        if (result.success && result.worker) {
+          const worker: UserProfile = result.worker;
+          const workers = localWorkers();
+          workers.unshift(worker);
+          saveLocalWorkers(workers);
+          await RedisService.cacheProfile(worker);
+          this.setCurrentUser(worker);
+          return { success: true, worker };
+        }
+      }
+    } catch {
+      // Fall through to direct Supabase registration
     }
 
-    if (workers.some(w => w.email.toLowerCase() === data.email.toLowerCase())) {
-      return { success: false, error: 'A worker with this email address is already registered.' };
+    if (!supabase) {
+      return { success: false, error: 'Database is not configured. Cannot register worker.' };
+    }
+
+    // 2. Direct Supabase Auth user creation
+    const { data: authData, error: authError } = await supabase.auth.signUp({
+      email: cleanEmail,
+      password: password,
+      options: {
+        data: {
+          full_name: data.fullName.trim(),
+          phone_number: formattedPhone,
+          device_url: data.deviceUrl.trim(),
+          device_pin: data.devicePin.trim(),
+          role: 'worker'
+        }
+      }
+    });
+
+    if (authError || !authData.user) {
+      return { success: false, error: authError?.message || 'Failed to create account in Supabase.' };
+    }
+
+    const userId = authData.user.id;
+
+    // 3. Insert profile into profiles table (ONLY valid columns)
+    const { error: profileError } = await supabase.from('profiles').upsert([{
+      id: userId,
+      full_name: data.fullName.trim(),
+      phone_number: formattedPhone,
+      device_url: data.deviceUrl.trim(),
+      device_pin: data.devicePin.trim(),
+      wallet_balance: 0,
+      role: 'worker',
+      phone_verified: data.isPhoneVerified
+    }]);
+
+    if (profileError) {
+      console.warn('Profile insert warning:', profileError.message);
     }
 
     const newWorker: UserProfile = {
-      id: 'usr_' + Math.random().toString(36).substring(2, 9),
-      email: data.email,
-      full_name: data.fullName,
+      id: userId,
+      email: cleanEmail,
+      full_name: data.fullName.trim(),
       phone_number: formattedPhone,
-      device_url: data.deviceUrl,
-      device_pin: data.devicePin,
-      wallet_balance: 0.0,
-      role: data.email.toLowerCase() === ADMIN_EMAIL.toLowerCase() ? 'admin' : 'worker',
+      device_url: data.deviceUrl.trim(),
+      device_pin: data.devicePin.trim(),
+      wallet_balance: 0,
+      role: 'worker',
       phone_verified: data.isPhoneVerified,
       created_at: new Date().toISOString()
     };
 
-    // If Supabase is connected, insert to Supabase auth & profiles
-    const supabase = getSupabase();
-    if (supabase) {
-      try {
-        await supabase.from('profiles').insert([
-          {
-            id: newWorker.id,
-            full_name: newWorker.full_name,
-            phone_number: newWorker.phone_number,
-            device_url: newWorker.device_url,
-            device_pin: newWorker.device_pin,
-            wallet_balance: 0,
-            role: newWorker.role,
-            phone_verified: newWorker.phone_verified
-          }
-        ]);
-      } catch (err) {
-        console.warn('Supabase profile insertion error:', err);
-      }
-    }
-
-    // Cache in Redis & local store
-    workers.push(newWorker);
-    localStorage.setItem(this.STORAGE_KEY_WORKERS, JSON.stringify(workers));
+    // 4. Cache in localStorage + Redis
+    const workers = localWorkers();
+    workers.unshift(newWorker);
+    saveLocalWorkers(workers);
     await RedisService.cacheProfile(newWorker);
 
-    // Auto-login
     this.setCurrentUser(newWorker);
-
     return { success: true, worker: newWorker };
   }
 
-  // Submit Weekly Earnings (Every Saturday)
-  public static async submitWeeklyEarnings(userId: string, amount: number): Promise<{ success: boolean; submission?: WeeklySubmission; error?: string }> {
-    const worker = await this.getWorkerById(userId);
-    if (!worker) {
-      return { success: false, error: 'Worker profile not found.' };
+  // ─── LOGIN (Supabase Auth) ─────────────────────────────────
+  public static async loginWorker(email: string, password?: string): Promise<{ success: boolean; worker?: UserProfile; error?: string }> {
+    const cleanEmail = email.toLowerCase().trim();
+    const supabase = getSupabase();
+
+    // 1. If password provided, authenticate against Supabase Auth
+    if (supabase && password) {
+      try {
+        const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+          email: cleanEmail,
+          password: password.trim()
+        });
+
+        if (!authError && authData.user) {
+          const u = authData.user;
+          const meta = u.user_metadata || {};
+
+          let profileFromDb: any = null;
+          try {
+            const { data: pData } = await supabase.from('profiles').select('*').eq('id', u.id).single();
+            if (pData) profileFromDb = pData;
+          } catch {
+            // ignore RLS error
+          }
+
+          const cached = await RedisService.getCachedProfile(u.id);
+
+          const worker: UserProfile = {
+            id: u.id,
+            email: u.email || cleanEmail,
+            full_name: profileFromDb?.full_name || meta.full_name || cached?.full_name || 'Worker',
+            phone_number: profileFromDb?.phone_number || meta.phone_number || cached?.phone_number || '',
+            device_url: profileFromDb?.device_url || meta.device_url || cached?.device_url || '',
+            device_pin: profileFromDb?.device_pin || meta.device_pin || cached?.device_pin || '',
+            wallet_balance: parseFloat(profileFromDb?.wallet_balance ?? cached?.wallet_balance ?? 0) || 0,
+            role: 'worker',
+            phone_verified: true,
+            created_at: profileFromDb?.created_at || u.created_at || new Date().toISOString()
+          };
+
+          this.setCurrentUser(worker);
+          await RedisService.cacheProfile(worker);
+          return { success: true, worker };
+        }
+      } catch (err) {
+        console.warn('Supabase signInWithPassword error:', err);
+      }
     }
 
+    // 2. Query Netlify workers function (server-side Supabase admin lookup)
+    try {
+      const resp = await fetch('/.netlify/functions/workers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'lookup', email: cleanEmail })
+      });
+      if (resp.ok) {
+        const data = await resp.json();
+        if (data.success && data.worker) {
+          this.setCurrentUser(data.worker);
+          await RedisService.cacheProfile(data.worker);
+          return { success: true, worker: data.worker };
+        }
+      }
+    } catch {
+      // offline / local fallback
+    }
+
+    // 3. Check Upstash Redis cache (by email)
+    const redisWorker = await RedisService.getProfileByEmail(cleanEmail);
+    if (redisWorker) {
+      this.setCurrentUser(redisWorker);
+      return { success: true, worker: redisWorker };
+    }
+
+    // 4. Fallback: check localStorage cache
+    const cached = localWorkers().find(w => w.email.toLowerCase() === cleanEmail);
+    if (cached) {
+      this.setCurrentUser(cached);
+      return { success: true, worker: cached };
+    }
+
+    return { success: false, error: 'No account found with this email. Please check your credentials or register first.' };
+  }
+
+  // ─── SUBMIT WEEKLY EARNINGS ───────────────────────────────
+  public static async submitWeeklyEarnings(userId: string, amount: number): Promise<{ success: boolean; submission?: WeeklySubmission; error?: string }> {
+    const worker = await this.getWorkerById(userId);
+    if (!worker) return { success: false, error: 'Worker profile not found.' };
+
     const calculatedCredit = calculateWalletCredit(amount);
-    const submissions = await this.getSubmissions();
+    const supabase = getSupabase();
+
+    let submissionId = 'sub_' + Math.random().toString(36).substring(2, 9);
+
+    if (supabase) {
+      try {
+        const { data, error } = await supabase.from('weekly_submissions').insert([{
+          user_id: userId,
+          amount_made: Number(amount.toFixed(2)),
+          calculated_credit: calculatedCredit,
+          status: 'pending',
+          week_date: new Date().toISOString().split('T')[0]
+        }]).select().single();
+
+        if (!error && data) {
+          submissionId = data.id;
+        }
+      } catch (err) {
+        console.warn('Supabase submission insert error:', err);
+      }
+    }
 
     const newSub: WeeklySubmission = {
-      id: 'sub_' + Math.random().toString(36).substring(2, 9),
+      id: submissionId,
       user_id: userId,
       amount_made: Number(amount.toFixed(2)),
       calculated_credit: calculatedCredit,
@@ -285,30 +423,13 @@ export class DataService {
       user: worker
     };
 
-    // Save locally & Redis
-    submissions.unshift(newSub);
-    localStorage.setItem(this.STORAGE_KEY_SUBMISSIONS, JSON.stringify(submissions));
-    await RedisService.cacheSubmissions(submissions);
+    // Local cache
+    const subs = localSubmissions();
+    subs.unshift(newSub);
+    saveLocalSubmissions(subs);
+    await RedisService.cacheSubmissions(subs);
 
-    // If Supabase is configured
-    const supabase = getSupabase();
-    if (supabase) {
-      try {
-        await supabase.from('weekly_submissions').insert([
-          {
-            id: newSub.id,
-            user_id: newSub.user_id,
-            amount_made: newSub.amount_made,
-            calculated_credit: newSub.calculated_credit,
-            status: 'pending'
-          }
-        ]);
-      } catch (err) {
-        console.warn('Supabase submission insert error:', err);
-      }
-    }
-
-    // Send Real SMS confirmation starting with "Hello {FullName}"
+    // SMS confirmation
     const message = SMSTemplates.submissionReceived(worker.full_name, amount);
     await SMSService.sendSMS({
       mobile: worker.phone_number,
@@ -321,68 +442,115 @@ export class DataService {
     return { success: true, submission: newSub };
   }
 
-  // Get Submissions
+  // ─── GET SUBMISSIONS ──────────────────────────────────────
   public static async getSubmissions(): Promise<WeeklySubmission[]> {
-    const raw = localStorage.getItem(this.STORAGE_KEY_SUBMISSIONS);
-    const list: WeeklySubmission[] = raw ? JSON.parse(raw) : SEED_SUBMISSIONS;
-    const workers = await this.getWorkers();
-    
-    // Attach user profile reference
-    return list.map(sub => ({
-      ...sub,
-      user: workers.find(w => w.id === sub.user_id)
-    }));
+    const supabase = getSupabase();
+
+    if (supabase) {
+      try {
+        const { data, error } = await supabase
+          .from('weekly_submissions')
+          .select(`
+            *,
+            profiles:user_id (
+              id, full_name, phone_number, email,
+              device_url, device_pin, wallet_balance, role, phone_verified, created_at
+            )
+          `)
+          .order('created_at', { ascending: false });
+
+        if (!error && data) {
+          const subs: WeeklySubmission[] = data.map((s: any) => ({
+            id: s.id,
+            user_id: s.user_id,
+            amount_made: parseFloat(s.amount_made),
+            calculated_credit: parseFloat(s.calculated_credit),
+            status: s.status,
+            week_date: s.week_date,
+            created_at: s.created_at,
+            approved_at: s.approved_at,
+            paid_at: s.paid_at,
+            user: s.profiles ? {
+              id: s.profiles.id,
+              email: s.profiles.email || '',
+              full_name: s.profiles.full_name,
+              phone_number: s.profiles.phone_number,
+              device_url: s.profiles.device_url,
+              device_pin: s.profiles.device_pin,
+              wallet_balance: parseFloat(s.profiles.wallet_balance) || 0,
+              role: s.profiles.role,
+              phone_verified: s.profiles.phone_verified,
+              created_at: s.profiles.created_at
+            } : undefined
+          }));
+          saveLocalSubmissions(subs);
+          return subs;
+        }
+      } catch (err) {
+        console.warn('Supabase getSubmissions failed, using cache:', err);
+      }
+    }
+
+    // Fallback: localStorage
+    const local = localSubmissions();
+    const workers = localWorkers();
+    return local.map(s => ({ ...s, user: workers.find(w => w.id === s.user_id) }));
   }
 
-  // Admin approves submission -> Credits wallet & sends SMS
+  // ─── APPROVE SUBMISSION ───────────────────────────────────
   public static async approveSubmission(submissionId: string): Promise<{ success: boolean; error?: string }> {
-    const submissions = await this.getSubmissions();
-    const index = submissions.findIndex(s => s.id === submissionId);
-    if (index === -1) return { success: false, error: 'Submission not found' };
-
-    const sub = submissions[index];
-    if (sub.status !== 'pending') {
-      return { success: false, error: `Submission is already ${sub.status}` };
-    }
+    const supabase = getSupabase();
+    const subs = await this.getSubmissions();
+    const sub = subs.find(s => s.id === submissionId);
+    if (!sub) return { success: false, error: 'Submission not found' };
+    if (sub.status !== 'pending') return { success: false, error: `Submission is already ${sub.status}` };
 
     const worker = await this.getWorkerById(sub.user_id);
     if (!worker) return { success: false, error: 'Worker profile not found' };
 
-    // Update submission
-    sub.status = 'approved';
-    sub.approved_at = new Date().toISOString();
-
-    // Credit Worker Wallet
     const newBalance = Number((worker.wallet_balance + sub.calculated_credit).toFixed(2));
-    worker.wallet_balance = newBalance;
 
-    // Persist
-    const workers = await this.getWorkers();
-    const workerIndex = workers.findIndex(w => w.id === worker.id);
-    if (workerIndex !== -1) workers[workerIndex] = worker;
+    if (supabase) {
+      try {
+        await supabase.from('weekly_submissions')
+          .update({ status: 'approved', approved_at: new Date().toISOString() })
+          .eq('id', submissionId);
 
-    localStorage.setItem(this.STORAGE_KEY_WORKERS, JSON.stringify(workers));
-    localStorage.setItem(this.STORAGE_KEY_SUBMISSIONS, JSON.stringify(submissions));
-
-    // Update Redis Cache
-    await RedisService.updateWalletBalance(worker.id, newBalance);
-    await RedisService.cacheProfile(worker);
-    await RedisService.cacheSubmissions(submissions);
-
-    // If current session is this worker, update session
-    const current = this.getCurrentUser();
-    if (current && current.id === worker.id) {
-      this.setCurrentUser(worker);
+        await supabase.from('profiles')
+          .update({ wallet_balance: newBalance, updated_at: new Date().toISOString() })
+          .eq('id', worker.id);
+      } catch (err) {
+        console.warn('Supabase approve error:', err);
+      }
     }
 
-    // Send Approval SMS: "Hello {FullName}, your weekly earnings... has been approved..."
-    const message = SMSTemplates.approvedAndCredited(
-      worker.full_name,
-      sub.amount_made,
-      sub.calculated_credit,
-      newBalance
-    );
+    // Update localStorage cache
+    const localSubs = localSubmissions();
+    const idx = localSubs.findIndex(s => s.id === submissionId);
+    if (idx !== -1) {
+      localSubs[idx].status = 'approved';
+      localSubs[idx].approved_at = new Date().toISOString();
+      saveLocalSubmissions(localSubs);
+    }
 
+    const localWrks = localWorkers();
+    const widx = localWrks.findIndex(w => w.id === worker.id);
+    if (widx !== -1) {
+      localWrks[widx].wallet_balance = newBalance;
+      saveLocalWorkers(localWrks);
+    }
+
+    await RedisService.updateWalletBalance(worker.id, newBalance);
+
+    const current = this.getCurrentUser();
+    if (current && current.id === worker.id) {
+      this.setCurrentUser({ ...current, wallet_balance: newBalance });
+    }
+
+    // SMS
+    const message = SMSTemplates.approvedAndCredited(
+      worker.full_name, sub.amount_made, sub.calculated_credit, newBalance
+    );
     await SMSService.sendSMS({
       mobile: worker.phone_number,
       recipientName: worker.full_name,
@@ -394,55 +562,59 @@ export class DataService {
     return { success: true };
   }
 
-  // Admin marks submission as Paid -> Deducts credit from wallet & sends SMS
+  // ─── MARK AS PAID ─────────────────────────────────────────
   public static async markSubmissionAsPaid(submissionId: string): Promise<{ success: boolean; error?: string }> {
-    const submissions = await this.getSubmissions();
-    const index = submissions.findIndex(s => s.id === submissionId);
-    if (index === -1) return { success: false, error: 'Submission not found' };
-
-    const sub = submissions[index];
-    if (sub.status === 'paid') {
-      return { success: false, error: 'Submission is already marked as paid' };
-    }
+    const supabase = getSupabase();
+    const subs = await this.getSubmissions();
+    const sub = subs.find(s => s.id === submissionId);
+    if (!sub) return { success: false, error: 'Submission not found' };
+    if (sub.status === 'paid') return { success: false, error: 'Already marked as paid' };
 
     const worker = await this.getWorkerById(sub.user_id);
     if (!worker) return { success: false, error: 'Worker profile not found' };
 
-    // Update submission status
-    sub.status = 'paid';
-    sub.paid_at = new Date().toISOString();
-
-    // Deduct from wallet balance
     const deduction = sub.calculated_credit;
     const newBalance = Math.max(0, Number((worker.wallet_balance - deduction).toFixed(2)));
-    worker.wallet_balance = newBalance;
 
-    // Persist
-    const workers = await this.getWorkers();
-    const workerIndex = workers.findIndex(w => w.id === worker.id);
-    if (workerIndex !== -1) workers[workerIndex] = worker;
+    if (supabase) {
+      try {
+        await supabase.from('weekly_submissions')
+          .update({ status: 'paid', paid_at: new Date().toISOString() })
+          .eq('id', submissionId);
 
-    localStorage.setItem(this.STORAGE_KEY_WORKERS, JSON.stringify(workers));
-    localStorage.setItem(this.STORAGE_KEY_SUBMISSIONS, JSON.stringify(submissions));
-
-    // Update Redis Cache
-    await RedisService.updateWalletBalance(worker.id, newBalance);
-    await RedisService.cacheProfile(worker);
-    await RedisService.cacheSubmissions(submissions);
-
-    // If current session is this worker, update session
-    const current = this.getCurrentUser();
-    if (current && current.id === worker.id) {
-      this.setCurrentUser(worker);
+        await supabase.from('profiles')
+          .update({ wallet_balance: newBalance, updated_at: new Date().toISOString() })
+          .eq('id', worker.id);
+      } catch (err) {
+        console.warn('Supabase markAsPaid error:', err);
+      }
     }
 
-    // Send Paid SMS: "Hello {FullName}, admin has paid your earnings of {amount}... deducted... new balance {balance}."
-    const message = SMSTemplates.markedAsPaid(
-      worker.full_name,
-      deduction,
-      newBalance
-    );
+    // Update localStorage
+    const localSubs = localSubmissions();
+    const idx = localSubs.findIndex(s => s.id === submissionId);
+    if (idx !== -1) {
+      localSubs[idx].status = 'paid';
+      localSubs[idx].paid_at = new Date().toISOString();
+      saveLocalSubmissions(localSubs);
+    }
 
+    const localWrks = localWorkers();
+    const widx = localWrks.findIndex(w => w.id === worker.id);
+    if (widx !== -1) {
+      localWrks[widx].wallet_balance = newBalance;
+      saveLocalWorkers(localWrks);
+    }
+
+    await RedisService.updateWalletBalance(worker.id, newBalance);
+
+    const current = this.getCurrentUser();
+    if (current && current.id === worker.id) {
+      this.setCurrentUser({ ...current, wallet_balance: newBalance });
+    }
+
+    // SMS
+    const message = SMSTemplates.markedAsPaid(worker.full_name, deduction, newBalance);
     await SMSService.sendSMS({
       mobile: worker.phone_number,
       recipientName: worker.full_name,
@@ -454,7 +626,7 @@ export class DataService {
     return { success: true };
   }
 
-  // Send Saturday Reminder SMS to all workers or pending workers
+  // ─── SATURDAY REMINDERS ───────────────────────────────────
   public static async sendSaturdayReminders(): Promise<{ sentCount: number; results: string[] }> {
     const workers = await this.getWorkers();
     const results: string[] = [];
@@ -462,7 +634,6 @@ export class DataService {
 
     for (const worker of workers) {
       if (worker.role !== 'worker') continue;
-
       const message = SMSTemplates.saturdayReminder(worker.full_name);
       const res = await SMSService.sendSMS({
         mobile: worker.phone_number,
@@ -471,10 +642,7 @@ export class DataService {
         messageType: 'saturday_reminder',
         userId: worker.id
       });
-
-      if (res.success) {
-        sentCount++;
-      }
+      if (res.success) sentCount++;
       results.push(`${worker.full_name} (${worker.phone_number}): ${res.description}`);
     }
 

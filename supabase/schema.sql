@@ -8,6 +8,7 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 -- 1. PROFILES TABLE (Linked with auth.users)
 CREATE TABLE IF NOT EXISTS public.profiles (
     id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+    email TEXT,
     full_name TEXT NOT NULL,
     phone_number TEXT NOT NULL UNIQUE,
     device_url TEXT NOT NULL,
@@ -198,18 +199,25 @@ ALTER TABLE public.weekly_submissions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.sms_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.otp_verifications ENABLE ROW LEVEL SECURITY;
 
+-- Helper function to check admin status cleanly without infinite recursion
+CREATE OR REPLACE FUNCTION public.is_admin()
+RETURNS BOOLEAN AS $$
+BEGIN
+    RETURN (auth.jwt() ->> 'email') = 'sammyseth260@gmail.com' OR 
+           (auth.jwt() -> 'user_metadata' ->> 'role') = 'admin';
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
 -- Allow users to read their own profile, admin to read all
 CREATE POLICY "Users can read own profile or admin can read all" ON public.profiles
 FOR SELECT USING (
-    auth.uid() = id OR 
-    EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin')
+    auth.uid() = id OR public.is_admin()
 );
 
 -- Allow users to update their own profile (except wallet/role), admin can update all
 CREATE POLICY "Users update own profile or admin" ON public.profiles
 FOR UPDATE USING (
-    auth.uid() = id OR 
-    EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin')
+    auth.uid() = id OR public.is_admin()
 );
 
 -- Allow users to insert profile on signup

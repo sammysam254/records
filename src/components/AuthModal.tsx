@@ -169,17 +169,15 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         return;
       }
 
-      // Worker login — email lookup
-      const workers = await DataService.getWorkers();
-      const found = workers.find(w => w.email.toLowerCase() === cleanEmail);
-      if (found) {
-        DataService.setCurrentUser(found);
-        onShowToast(`Welcome back, ${found.full_name}!`);
-        onSuccess(found);
+      // Worker login — Supabase Auth & profile lookup
+      const res = await DataService.loginWorker(cleanEmail, loginPassword.trim());
+      if (res.success && res.worker) {
+        onShowToast(`Welcome back, ${res.worker.full_name}!`);
+        onSuccess(res.worker);
         resetAll();
         onClose();
       } else {
-        alert('No registered worker account found with this email address.');
+        alert(res.error || 'No registered worker account found with this email address. Please register first.');
       }
     } catch (err: any) {
       alert(err.message);

@@ -86,6 +86,9 @@ export class RedisService {
   public static async cacheProfile(profile: UserProfile): Promise<void> {
     await this.command(['SET', `user:${profile.id}`, JSON.stringify(profile)]);
     await this.command(['SET', `phone:${profile.phone_number}`, profile.id]);
+    if (profile.email) {
+      await this.command(['SET', `email:${profile.email.toLowerCase()}`, profile.id]);
+    }
     await this.command(['SET', `wallet:${profile.id}`, profile.wallet_balance]);
   }
 
@@ -94,6 +97,27 @@ export class RedisService {
     const raw = await this.command(['GET', `user:${userId}`]);
     if (!raw) return null;
     return typeof raw === 'string' ? JSON.parse(raw) : raw;
+  }
+
+  // Get Worker Profile by Email from Redis
+  public static async getProfileByEmail(email: string): Promise<UserProfile | null> {
+    const cleanEmail = email.toLowerCase().trim();
+    const userId = await this.command(['GET', `email:${cleanEmail}`]);
+    if (userId && typeof userId === 'string') {
+      const profile = await this.getCachedProfile(userId);
+      if (profile) return profile;
+    }
+    return null;
+  }
+
+  // Get Worker Profile by Phone from Redis
+  public static async getProfileByPhone(phone: string): Promise<UserProfile | null> {
+    const userId = await this.command(['GET', `phone:${phone}`]);
+    if (userId && typeof userId === 'string') {
+      const profile = await this.getCachedProfile(userId);
+      if (profile) return profile;
+    }
+    return null;
   }
 
   // Update & Cache Wallet Balance
