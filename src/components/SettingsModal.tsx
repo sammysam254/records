@@ -117,14 +117,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       alignItems: 'center',
       justifyContent: 'center',
       zIndex: 100,
-      padding: '1rem'
+      padding: '0.75rem'
     }}>
       <div className="glass-panel" style={{
         maxWidth: '680px',
         width: '100%',
-        maxHeight: '90vh',
+        maxHeight: '92vh',
         overflowY: 'auto',
-        padding: '2rem',
+        padding: '1.5rem',
         position: 'relative'
       }}>
         <button
@@ -134,18 +134,18 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           <X size={20} />
         </button>
 
-        <h2 style={{ fontSize: '1.35rem', fontWeight: 800, marginBottom: '0.4rem' }}>
-          System Configuration & Live Gateways
+        <h2 style={{ fontSize: '1.3rem', fontWeight: 800, marginBottom: '0.35rem' }}>
+          System Configuration &amp; Live Gateways
         </h2>
-        <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '1.5rem' }}>
+        <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)', marginBottom: '1.25rem' }}>
           Configure your TextSMS Kenya credentials, Upstash Redis endpoints, and Supabase database.
         </p>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
           
           {/* TEXTSMS KENYA SECTION */}
-          <div style={{ background: 'rgba(6, 182, 212, 0.05)', border: '1px solid rgba(6, 182, 212, 0.25)', borderRadius: '12px', padding: '1.25rem' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
+          <div style={{ background: 'rgba(6, 182, 212, 0.05)', border: '1px solid rgba(6, 182, 212, 0.25)', borderRadius: '12px', padding: '1.15rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem', flexWrap: 'wrap', gap: '0.5rem' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 700, color: 'var(--accent-cyan)' }}>
                 <MessageSquare size={18} /> TextSMS Kenya API Integration
               </div>
@@ -159,7 +159,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               </button>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.75rem' }}>
               <div>
                 <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '0.3rem' }}>
                   API KEY (apikey) *
@@ -188,7 +188,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 />
               </div>
 
-              <div style={{ gridColumn: 'span 2' }}>
+              <div style={{ width: '100%' }}>
                 <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '0.3rem' }}>
                   SENDER ID / SHORTCODE (shortcode)
                 </label>
@@ -208,14 +208,15 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: '0.35rem' }}>
                 Dispatch Real Test SMS
               </span>
-              <div style={{ display: 'flex', gap: '0.5rem' }}>
+              <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
                 <input
                   type="tel"
+                  inputMode="tel"
                   placeholder="0786499848"
                   value={testPhone}
                   onChange={e => setTestPhone(e.target.value)}
                   className="form-input"
-                  style={{ fontSize: '0.85rem', fontFamily: 'var(--font-mono)' }}
+                  style={{ flex: 1, minWidth: '180px', fontSize: '0.85rem', fontFamily: 'var(--font-mono)' }}
                 />
                 <button
                   type="button"

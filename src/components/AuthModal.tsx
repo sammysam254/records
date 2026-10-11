@@ -256,14 +256,14 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       alignItems: 'center',
       justifyContent: 'center',
       zIndex: 100,
-      padding: '1rem'
+      padding: '0.75rem'
     }}>
       <div className="glass-panel" style={{
         maxWidth: '560px',
         width: '100%',
-        maxHeight: '92vh',
+        maxHeight: '94vh',
         overflowY: 'auto',
-        padding: '2rem',
+        padding: '1.5rem',
         position: 'relative'
       }}>
         {/* Close Button */}
@@ -627,7 +627,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             </div>
 
             {/* Assigned Device URL & PIN */}
-            <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '0.75rem' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.75rem' }}>
               <div>
                 <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '0.35rem' }}>
                   Assigned Device URL *
@@ -654,6 +654,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   <KeyRound size={16} style={{ position: 'absolute', left: '0.85rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-dim)' }} />
                   <input
                     type="text"
+                    inputMode="numeric"
                     required
                     placeholder="e.g. 8492"
                     value={devicePin}
@@ -666,7 +667,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             </div>
 
             {/* Email & Password */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.75rem' }}>
               <div>
                 <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '0.35rem' }}>
                   Email Address *

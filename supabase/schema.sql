@@ -209,43 +209,52 @@ END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 -- Allow users to read their own profile, admin to read all
+DROP POLICY IF EXISTS "Users can read own profile or admin can read all" ON public.profiles;
 CREATE POLICY "Users can read own profile or admin can read all" ON public.profiles
 FOR SELECT USING (
     auth.uid() = id OR public.is_admin()
 );
 
 -- Allow users to update their own profile (except wallet/role), admin can update all
+DROP POLICY IF EXISTS "Users update own profile or admin" ON public.profiles;
 CREATE POLICY "Users update own profile or admin" ON public.profiles
 FOR UPDATE USING (
     auth.uid() = id OR public.is_admin()
 );
 
 -- Allow users to insert profile on signup
+DROP POLICY IF EXISTS "Users can insert own profile" ON public.profiles;
 CREATE POLICY "Users can insert own profile" ON public.profiles
 FOR INSERT WITH CHECK (auth.uid() = id);
 
 -- Submissions policies
+DROP POLICY IF EXISTS "Users can view own submissions, admin views all" ON public.weekly_submissions;
 CREATE POLICY "Users can view own submissions, admin views all" ON public.weekly_submissions
 FOR SELECT USING (
-    auth.uid() = user_id OR 
+    auth.uid() = user_id OR public.is_admin() OR
     EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin')
 );
 
+DROP POLICY IF EXISTS "Users can insert own submissions" ON public.weekly_submissions;
 CREATE POLICY "Users can insert own submissions" ON public.weekly_submissions
 FOR INSERT WITH CHECK (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "Admin can update submissions" ON public.weekly_submissions;
 CREATE POLICY "Admin can update submissions" ON public.weekly_submissions
 FOR UPDATE USING (
+    public.is_admin() OR
     EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin')
 );
 
 -- OTP policies (can be inserted/selected for verification)
+DROP POLICY IF EXISTS "Public can insert and verify OTP" ON public.otp_verifications;
 CREATE POLICY "Public can insert and verify OTP" ON public.otp_verifications
 FOR ALL USING (true) WITH CHECK (true);
 
 -- SMS logs: Admin can read all, user can read own
+DROP POLICY IF EXISTS "SMS logs viewable by admin or owner" ON public.sms_logs;
 CREATE POLICY "SMS logs viewable by admin or owner" ON public.sms_logs
 FOR SELECT USING (
-    auth.uid() = user_id OR 
+    auth.uid() = user_id OR public.is_admin() OR
     EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin')
 );

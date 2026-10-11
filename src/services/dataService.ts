@@ -88,7 +88,6 @@ export class DataService {
         const { data, error } = await supabase
           .from('profiles')
           .select('*')
-          .eq('role', 'worker')
           .order('created_at', { ascending: false });
 
         if (!error && data && data.length > 0) {
@@ -100,7 +99,7 @@ export class DataService {
             device_url: r.device_url,
             device_pin: r.device_pin,
             wallet_balance: parseFloat(r.wallet_balance) || 0,
-            role: r.role,
+            role: r.role || 'worker',
             phone_verified: r.phone_verified,
             created_at: r.created_at
           }));
@@ -114,6 +113,59 @@ export class DataService {
 
     // 3. Fallback to localStorage cache
     return localWorkers();
+  }
+
+  // ─── UPDATE USER BALANCE DIRECTLY (ADMIN ACTION) ───────────
+  public static async updateUserBalance(
+    userId: string,
+    newBalance: number,
+    notifyUser: boolean = true,
+    reason?: string
+  ): Promise<{ success: boolean; error?: string }> {
+    const cleanBalance = Number(Math.max(0, newBalance).toFixed(2));
+    const worker = await this.getWorkerById(userId);
+    if (!worker) return { success: false, error: 'User profile not found' };
+
+    const supabase = getSupabase();
+    if (supabase) {
+      try {
+        await supabase
+          .from('profiles')
+          .update({ wallet_balance: cleanBalance, updated_at: new Date().toISOString() })
+          .eq('id', userId);
+      } catch (err: any) {
+        console.warn('Supabase updateUserBalance error:', err);
+      }
+    }
+
+    // Update localStorage cache
+    const localWrks = localWorkers();
+    const widx = localWrks.findIndex(w => w.id === userId);
+    if (widx !== -1) {
+      localWrks[widx].wallet_balance = cleanBalance;
+      saveLocalWorkers(localWrks);
+    }
+
+    await RedisService.updateWalletBalance(userId, cleanBalance);
+
+    const current = this.getCurrentUser();
+    if (current && current.id === userId) {
+      this.setCurrentUser({ ...current, wallet_balance: cleanBalance });
+    }
+
+    // Optionally notify user via SMS
+    if (notifyUser && worker.phone_number) {
+      const msg = `Hello ${worker.full_name}, your VertextPay wallet balance has been updated by administrator to $${cleanBalance.toFixed(2)}${reason ? ` (${reason})` : ''}.`;
+      await SMSService.sendSMS({
+        mobile: worker.phone_number,
+        recipientName: worker.full_name,
+        message: msg,
+        messageType: 'custom',
+        userId: worker.id
+      });
+    }
+
+    return { success: true };
   }
 
   // ─── GET SINGLE WORKER ────────────────────────────────────

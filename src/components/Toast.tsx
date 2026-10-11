@@ -12,18 +12,19 @@ export const Toast: React.FC<ToastProps> = ({ message, onClose }) => {
   return (
     <div style={{
       position: 'fixed',
-      bottom: '1.5rem',
-      right: '1.5rem',
+      bottom: '1rem',
+      right: '1rem',
+      maxWidth: 'calc(100vw - 2rem)',
+      width: 'max-content',
       background: 'rgba(16, 22, 35, 0.95)',
       backdropFilter: 'blur(12px)',
       border: '1px solid rgba(56, 189, 248, 0.3)',
       boxShadow: '0 10px 25px rgba(0, 0, 0, 0.5), 0 0 15px rgba(6, 182, 212, 0.25)',
       borderRadius: '12px',
-      padding: '0.85rem 1.25rem',
+      padding: '0.85rem 1.15rem',
       display: 'flex',
       alignItems: 'center',
       gap: '0.75rem',
-      maxWidth: '450px',
       zIndex: 200,
       color: '#f8fafc',
       fontSize: '0.875rem'

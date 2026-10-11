@@ -109,24 +109,35 @@ export function App() {
       {/* Footer Info */}
       <footer style={{
         borderTop: '1px solid var(--border-subtle)',
-        padding: '1.5rem',
+        padding: '1.25rem 1rem',
         textAlign: 'center',
         fontSize: '0.78rem',
         color: 'var(--text-dim)',
         background: 'rgba(10, 13, 20, 0.7)'
       }}>
-        <div style={{ maxWidth: '1200px', margin: '0 auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
-          <div>
-            <strong>VertextPay</strong> &copy; 2026. Worker Weekly Records & SMS Disbursement Platform.
+        <div style={{
+          maxWidth: '1200px',
+          margin: '0 auto',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          flexWrap: 'wrap',
+          gap: '0.75rem'
+        }}>
+          <div style={{ width: '100%', textAlign: 'center' }} className="show-on-mobile">
+            <strong>VertextPay</strong> &copy; 2026. Worker Weekly Records &amp; SMS Disbursement.
           </div>
-          <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
-            <span>Powered by <strong>TextSMS Kenya</strong> & <strong>Upstash Redis</strong></span>
+          <div className="hide-on-mobile">
+            <strong>VertextPay</strong> &copy; 2026. Worker Weekly Records &amp; SMS Disbursement Platform.
+          </div>
+          <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap', width: '100%', maxWidth: 'none' }}>
+            <span>Powered by <strong>TextSMS Kenya</strong> &amp; <strong>Upstash Redis</strong></span>
             <span>•</span>
             <button
               onClick={() => setIsSettingsOpen(true)}
-              style={{ background: 'none', border: 'none', color: 'var(--accent-cyan)', cursor: 'pointer', fontSize: '0.78rem' }}
+              style={{ background: 'none', border: 'none', color: 'var(--accent-cyan)', cursor: 'pointer', fontSize: '0.78rem', textDecoration: 'underline' }}
             >
-              Configure Netlify & Supabase Keys
+              Configure Netlify &amp; Supabase Keys
             </button>
           </div>
         </div>

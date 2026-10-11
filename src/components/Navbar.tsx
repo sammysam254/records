@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import type { UserProfile } from '../types';
 import { ADMIN_EMAIL } from '../services/dataService';
 import { 
@@ -7,9 +7,11 @@ import {
   Settings, 
   Zap, 
   Database, 
-  MessageSquare,
-  Users,
-  LogOut
+  MessageSquare, 
+  Users, 
+  LogOut,
+  Menu,
+  X
 } from 'lucide-react';
 
 interface NavbarProps {
@@ -25,146 +27,347 @@ export const Navbar: React.FC<NavbarProps> = ({
   onSwitchUser,
   onLogout
 }) => {
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const isAuthorizedAdmin = currentUser?.email.toLowerCase() === ADMIN_EMAIL.toLowerCase();
 
   return (
-    <header className="glass-panel" style={{ borderRadius: 0, borderTop: 'none', borderLeft: 'none', borderRight: 'none', position: 'sticky', top: 0, zIndex: 50, padding: '0.85rem 1.5rem' }}>
-      <div style={{ maxWidth: '1400px', margin: '0 auto', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap' }}>
+    <>
+      <header className="glass-panel" style={{
+        borderRadius: 0,
+        borderTop: 'none',
+        borderLeft: 'none',
+        borderRight: 'none',
+        position: 'sticky',
+        top: 0,
+        zIndex: 50,
+        padding: '0.75rem 1rem'
+      }}>
+        <div style={{
+          maxWidth: '1400px',
+          margin: '0 auto',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: '0.75rem'
+        }}>
 
-        {/* Brand */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
-          <div style={{
-            background: 'var(--gradient-brand)',
-            width: '42px',
-            height: '42px',
-            borderRadius: '12px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            boxShadow: 'var(--shadow-glow-cyan)'
-          }}>
-            <Database size={22} color="#ffffff" />
+          {/* Brand */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            <div style={{
+              background: 'var(--gradient-brand)',
+              width: '38px',
+              height: '38px',
+              borderRadius: '10px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              boxShadow: 'var(--shadow-glow-cyan)',
+              flexShrink: 0
+            }}>
+              <Database size={20} color="#ffffff" />
+            </div>
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                <span style={{
+                  fontWeight: 800,
+                  fontSize: '1.15rem',
+                  letterSpacing: '-0.02em',
+                  background: 'var(--gradient-brand)',
+                  WebkitBackgroundClip: 'text',
+                  WebkitTextFillColor: 'transparent'
+                }}>
+                  VertextPay
+                </span>
+                <span className="badge" style={{
+                  background: 'rgba(6, 182, 212, 0.15)',
+                  color: '#38bdf8',
+                  border: '1px solid rgba(6, 182, 212, 0.3)',
+                  padding: '0.15rem 0.45rem',
+                  fontSize: '0.65rem'
+                }}>
+                  v2.0
+                </span>
+              </div>
+              <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', lineHeight: 1.2 }}>
+                Worker Weekly Ledger &amp; SMS
+              </p>
+            </div>
           </div>
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <span style={{ fontWeight: 800, fontSize: '1.25rem', letterSpacing: '-0.02em', background: 'var(--gradient-brand)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
-                VertextPay
-              </span>
-              <span className="badge" style={{ background: 'rgba(6, 182, 212, 0.15)', color: '#38bdf8', border: '1px solid rgba(6, 182, 212, 0.3)' }}>
-                v2.0
-              </span>
-            </div>
-            <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-              Worker Weekly Ledger &amp; SMS Disbursement
-            </p>
-          </div>
-        </div>
 
-        {/* Live Status Indicators — ADMIN ONLY */}
-        {isAuthorizedAdmin && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', flexWrap: 'wrap' }}>
-            <div className="badge" style={{ background: 'rgba(16, 185, 129, 0.12)', color: '#10b981', border: '1px solid rgba(16, 185, 129, 0.25)' }}>
-              <Zap size={12} /> Upstash Redis Active
-            </div>
-            <div className="badge" style={{ background: 'rgba(56, 189, 248, 0.12)', color: '#38bdf8', border: '1px solid rgba(56, 189, 248, 0.25)' }}>
-              <MessageSquare size={12} /> TextSMS Ready
-            </div>
-            <div className="badge" style={{ background: 'rgba(139, 92, 246, 0.12)', color: '#a78bfa', border: '1px solid rgba(139, 92, 246, 0.25)' }}>
-              <ShieldCheck size={12} /> Supabase DB
-            </div>
-          </div>
-        )}
-
-        {/* Right side actions */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-
-          {/* Admin Mode toggle — ADMIN ONLY */}
+          {/* Desktop Live Status Indicators — ADMIN ONLY */}
           {isAuthorizedAdmin && (
-            <div style={{ display: 'flex', background: 'rgba(0,0,0,0.3)', padding: '3px', borderRadius: '10px', border: '1px solid var(--border-subtle)' }}>
-              <button
-                onClick={() => onSwitchUser('worker')}
-                style={{
-                  padding: '0.4rem 0.75rem',
-                  fontSize: '0.75rem',
-                  fontWeight: 600,
-                  borderRadius: '7px',
-                  border: 'none',
-                  cursor: 'pointer',
-                  background: currentUser?.role === 'worker' ? 'var(--accent-cyan)' : 'transparent',
-                  color: currentUser?.role === 'worker' ? '#0a0d14' : 'var(--text-muted)'
-                }}
-              >
-                Worker Mode
-              </button>
-              <button
-                onClick={() => onSwitchUser('admin')}
-                style={{
-                  padding: '0.4rem 0.75rem',
-                  fontSize: '0.75rem',
-                  fontWeight: 600,
-                  borderRadius: '7px',
-                  border: 'none',
-                  cursor: 'pointer',
-                  background: currentUser?.role === 'admin' ? 'var(--accent-violet)' : 'transparent',
-                  color: currentUser?.role === 'admin' ? '#ffffff' : 'var(--text-muted)'
-                }}
-              >
-                Admin Panel
-              </button>
+            <div className="hide-on-mobile" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <div className="badge" style={{ background: 'rgba(16, 185, 129, 0.12)', color: '#10b981', border: '1px solid rgba(16, 185, 129, 0.25)', fontSize: '0.72rem' }}>
+                <Zap size={12} /> Redis Active
+              </div>
+              <div className="badge" style={{ background: 'rgba(56, 189, 248, 0.12)', color: '#38bdf8', border: '1px solid rgba(56, 189, 248, 0.25)', fontSize: '0.72rem' }}>
+                <MessageSquare size={12} /> TextSMS Ready
+              </div>
+              <div className="badge" style={{ background: 'rgba(139, 92, 246, 0.12)', color: '#a78bfa', border: '1px solid rgba(139, 92, 246, 0.25)', fontSize: '0.72rem' }}>
+                <ShieldCheck size={12} /> Supabase DB
+              </div>
             </div>
           )}
 
-          {/* Current user chip — everyone */}
-          {currentUser && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'rgba(255, 255, 255, 0.04)', padding: '0.35rem 0.75rem', borderRadius: '10px', border: '1px solid var(--border-subtle)' }}>
-              <div style={{ width: '28px', height: '28px', borderRadius: '50%', background: isAuthorizedAdmin ? 'var(--accent-violet)' : 'var(--accent-cyan)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                {isAuthorizedAdmin ? <ShieldCheck size={16} color="#fff" /> : <User size={16} color="#000" />}
+          {/* Desktop Right Actions */}
+          <div className="hide-on-mobile" style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+            {/* Admin Mode toggle */}
+            {isAuthorizedAdmin && (
+              <div style={{ display: 'flex', background: 'rgba(0,0,0,0.3)', padding: '3px', borderRadius: '10px', border: '1px solid var(--border-subtle)' }}>
+                <button
+                  onClick={() => onSwitchUser('worker')}
+                  style={{
+                    padding: '0.35rem 0.7rem',
+                    fontSize: '0.75rem',
+                    fontWeight: 600,
+                    borderRadius: '7px',
+                    border: 'none',
+                    cursor: 'pointer',
+                    background: currentUser?.role === 'worker' ? 'var(--accent-cyan)' : 'transparent',
+                    color: currentUser?.role === 'worker' ? '#0a0d14' : 'var(--text-muted)'
+                  }}
+                >
+                  Worker Mode
+                </button>
+                <button
+                  onClick={() => onSwitchUser('admin')}
+                  style={{
+                    padding: '0.35rem 0.7rem',
+                    fontSize: '0.75rem',
+                    fontWeight: 600,
+                    borderRadius: '7px',
+                    border: 'none',
+                    cursor: 'pointer',
+                    background: currentUser?.role === 'admin' ? 'var(--accent-violet)' : 'transparent',
+                    color: currentUser?.role === 'admin' ? '#ffffff' : 'var(--text-muted)'
+                  }}
+                >
+                  Admin Panel
+                </button>
               </div>
-              <div style={{ textAlign: 'left' }}>
-                <div style={{ fontSize: '0.8rem', fontWeight: 600 }}>{currentUser.full_name}</div>
-                <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>
-                  {isAuthorizedAdmin ? 'Administrator' : currentUser.email}
+            )}
+
+            {/* Current user chip */}
+            {currentUser && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'rgba(255, 255, 255, 0.04)', padding: '0.35rem 0.65rem', borderRadius: '10px', border: '1px solid var(--border-subtle)' }}>
+                <div style={{ width: '26px', height: '26px', borderRadius: '50%', background: isAuthorizedAdmin ? 'var(--accent-violet)' : 'var(--accent-cyan)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  {isAuthorizedAdmin ? <ShieldCheck size={14} color="#fff" /> : <User size={14} color="#000" />}
+                </div>
+                <div style={{ textAlign: 'left', lineHeight: 1.2 }}>
+                  <div style={{ fontSize: '0.78rem', fontWeight: 600 }}>{currentUser.full_name}</div>
+                  <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>
+                    {isAuthorizedAdmin ? 'Administrator' : currentUser.email}
+                  </div>
                 </div>
               </div>
-            </div>
-          )}
+            )}
 
-          {/* Settings — ADMIN ONLY */}
-          {isAuthorizedAdmin && (
+            {/* Register New Worker */}
+            {isAuthorizedAdmin && (
+              <button
+                onClick={() => onSwitchUser('new')}
+                className="btn-secondary"
+                style={{ padding: '0.45rem 0.7rem', borderRadius: '9px', fontSize: '0.78rem' }}
+                title="Register New Worker"
+              >
+                <Users size={15} />
+                <span>Register</span>
+              </button>
+            )}
+
+            {/* Settings */}
+            {isAuthorizedAdmin && (
+              <button
+                onClick={onOpenSettings}
+                className="btn-secondary"
+                style={{ padding: '0.45rem 0.65rem', borderRadius: '9px' }}
+                title="System Settings"
+              >
+                <Settings size={15} />
+              </button>
+            )}
+
+            {/* Logout */}
             <button
-              onClick={onOpenSettings}
+              onClick={onLogout}
               className="btn-secondary"
-              style={{ padding: '0.5rem 0.75rem', borderRadius: '9px' }}
-              title="System & API Settings"
+              style={{ padding: '0.45rem 0.65rem', borderRadius: '9px' }}
+              title="Logout"
             >
-              <Settings size={16} />
+              <LogOut size={15} />
             </button>
-          )}
+          </div>
 
-          {/* Register New Worker — ADMIN ONLY */}
-          {isAuthorizedAdmin && (
+          {/* Mobile Right Controls: Role Chip + Hamburger Toggle */}
+          <div className="show-on-mobile" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            {currentUser && (
+              <div style={{
+                fontSize: '0.72rem',
+                fontWeight: 700,
+                padding: '0.25rem 0.55rem',
+                borderRadius: '8px',
+                background: isAuthorizedAdmin ? 'rgba(139, 92, 246, 0.2)' : 'rgba(6, 182, 212, 0.2)',
+                color: isAuthorizedAdmin ? '#c4b5fd' : '#38bdf8',
+                border: isAuthorizedAdmin ? '1px solid rgba(139, 92, 246, 0.35)' : '1px solid rgba(6, 182, 212, 0.35)'
+              }}>
+                {isAuthorizedAdmin ? 'Admin' : 'Worker'}
+              </div>
+            )}
+
             <button
-              onClick={() => onSwitchUser('new')}
+              onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
               className="btn-secondary"
-              style={{ padding: '0.5rem 0.75rem', borderRadius: '9px' }}
-              title="Register Worker"
+              style={{ padding: '0.45rem 0.65rem', borderRadius: '9px' }}
+              aria-label="Toggle mobile navigation menu"
             >
-              <Users size={16} />
+              {isMobileMenuOpen ? <X size={20} /> : <Menu size={20} />}
             </button>
-          )}
+          </div>
 
-          {/* Logout — everyone */}
-          <button
-            onClick={onLogout}
-            className="btn-secondary"
-            style={{ padding: '0.5rem 0.75rem', borderRadius: '9px' }}
-            title="Logout"
-          >
-            <LogOut size={16} />
-          </button>
         </div>
+      </header>
 
-      </div>
-    </header>
+      {/* Mobile Drawer Overlay */}
+      {isMobileMenuOpen && (
+        <div
+          className="mobile-drawer-overlay"
+          onClick={() => setIsMobileMenuOpen(false)}
+        >
+          <div
+            className="mobile-drawer-content"
+            onClick={e => e.stopPropagation()}
+          >
+            {/* Drawer Header */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '1rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+                <div style={{
+                  width: '36px', height: '36px', borderRadius: '10px',
+                  background: isAuthorizedAdmin ? 'var(--accent-violet)' : 'var(--accent-cyan)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center'
+                }}>
+                  {isAuthorizedAdmin ? <ShieldCheck size={18} color="#fff" /> : <User size={18} color="#000" />}
+                </div>
+                <div>
+                  <div style={{ fontWeight: 700, fontSize: '0.9rem' }}>{currentUser?.full_name || 'Guest User'}</div>
+                  <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                    {isAuthorizedAdmin ? 'Administrator' : currentUser?.phone_number || currentUser?.email}
+                  </div>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsMobileMenuOpen(false)}
+                style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '0.25rem' }}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Role Mode Switcher (Admin Only) */}
+            {isAuthorizedAdmin && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase' }}>
+                  Switch Workspace
+                </span>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.4rem', background: 'rgba(0,0,0,0.3)', padding: '4px', borderRadius: '10px', border: '1px solid var(--border-subtle)' }}>
+                  <button
+                    onClick={() => { onSwitchUser('worker'); setIsMobileMenuOpen(false); }}
+                    style={{
+                      padding: '0.55rem',
+                      fontSize: '0.78rem',
+                      fontWeight: 600,
+                      borderRadius: '8px',
+                      border: 'none',
+                      cursor: 'pointer',
+                      background: currentUser?.role === 'worker' ? 'var(--accent-cyan)' : 'transparent',
+                      color: currentUser?.role === 'worker' ? '#0a0d14' : 'var(--text-muted)'
+                    }}
+                  >
+                    Worker Mode
+                  </button>
+                  <button
+                    onClick={() => { onSwitchUser('admin'); setIsMobileMenuOpen(false); }}
+                    style={{
+                      padding: '0.55rem',
+                      fontSize: '0.78rem',
+                      fontWeight: 600,
+                      borderRadius: '8px',
+                      border: 'none',
+                      cursor: 'pointer',
+                      background: currentUser?.role === 'admin' ? 'var(--accent-violet)' : 'transparent',
+                      color: currentUser?.role === 'admin' ? '#ffffff' : 'var(--text-muted)'
+                    }}
+                  >
+                    Admin Panel
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Quick Actions List */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
+              <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase' }}>
+                Navigation &amp; Actions
+              </span>
+
+              {isAuthorizedAdmin && (
+                <button
+                  onClick={() => { onSwitchUser('new'); setIsMobileMenuOpen(false); }}
+                  className="btn-primary"
+                  style={{ width: '100%', justifyContent: 'flex-start', fontSize: '0.85rem' }}
+                >
+                  <Users size={16} /> Register New Worker
+                </button>
+              )}
+
+              {isAuthorizedAdmin && (
+                <button
+                  onClick={() => { onOpenSettings(); setIsMobileMenuOpen(false); }}
+                  className="btn-secondary"
+                  style={{ width: '100%', justifyContent: 'flex-start', fontSize: '0.85rem' }}
+                >
+                  <Settings size={16} /> System &amp; API Settings
+                </button>
+              )}
+
+              <button
+                onClick={() => { onLogout(); setIsMobileMenuOpen(false); }}
+                className="btn-secondary"
+                style={{ width: '100%', justifyContent: 'flex-start', fontSize: '0.85rem', color: '#fb7185' }}
+              >
+                <LogOut size={16} /> Sign Out
+              </button>
+            </div>
+
+            {/* Live System Gateways Status */}
+            {isAuthorizedAdmin && (
+              <div style={{ marginTop: 'auto', borderTop: '1px solid var(--border-subtle)', paddingTop: '1rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase' }}>
+                  System Health
+                </span>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.75rem', color: '#10b981' }}>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                    <Zap size={13} /> Upstash Redis
+                  </span>
+                  <span className="badge badge-approved" style={{ fontSize: '0.65rem' }}>Connected</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.75rem', color: '#38bdf8' }}>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                    <MessageSquare size={13} /> TextSMS Kenya
+                  </span>
+                  <span className="badge" style={{ fontSize: '0.65rem', background: 'rgba(56, 189, 248, 0.15)', color: '#38bdf8' }}>Ready</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.75rem', color: '#c4b5fd' }}>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                    <ShieldCheck size={13} /> Supabase DB
+                  </span>
+                  <span className="badge" style={{ fontSize: '0.65rem', background: 'rgba(139, 92, 246, 0.15)', color: '#c4b5fd' }}>Active</span>
+                </div>
+              </div>
+            )}
+
+          </div>
+        </div>
+      )}
+    </>
   );
 };
