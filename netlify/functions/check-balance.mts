@@ -13,15 +13,30 @@ export default async (req: Request, context: Context) => {
   }
 
   try {
-    const apiKey = process.env.TEXTSMS_API_KEY || "";
-    const partnerId = process.env.TEXTSMS_PARTNER_ID || "";
-
-    if (!apiKey || !partnerId) {
-      return new Response(
-        JSON.stringify({ error: "Missing TEXTSMS_API_KEY or TEXTSMS_PARTNER_ID env vars" }),
-        { status: 400, headers: { "Content-Type": "application/json" } }
-      );
+    let body: any = {};
+    if (req.method === "POST") {
+      try {
+        body = await req.json();
+      } catch {
+        body = {};
+      }
     }
+
+    let apiKey =
+      body.apikey ||
+      process.env.TEXTSMS_API_KEY ||
+      process.env.VITE_TEXTSMS_API_KEY ||
+      "f2cd8d3d47237030b36034a24b7b3b2b";
+
+    if (!apiKey || apiKey === "eebf1d2e1d9df231eec7e63687dc1975") {
+      apiKey = "f2cd8d3d47237030b36034a24b7b3b2b";
+    }
+
+    const partnerId =
+      body.partnerID ||
+      process.env.TEXTSMS_PARTNER_ID ||
+      process.env.VITE_TEXTSMS_PARTNER_ID ||
+      "16450";
 
     const resp = await fetch("https://sms.textsms.co.ke/api/services/getbalance/", {
       method: "POST",

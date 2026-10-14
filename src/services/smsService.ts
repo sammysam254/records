@@ -71,11 +71,26 @@ export const SMSTemplates = {
 };
 
 export class SMSService {
+  public static readonly DEFAULT_API_KEY = 'f2cd8d3d47237030b36034a24b7b3b2b';
+  public static readonly DEFAULT_PARTNER_ID = '16450';
+  public static readonly DEFAULT_SHORTCODE = 'TextSMS';
+
   public static getStoredConfig() {
-    const apiKey = localStorage.getItem('textsms_apikey') || import.meta.env.VITE_TEXTSMS_API_KEY || '';
-    // partnerID is optional — TextSMS Kenya works with just the API key + default shortcode
-    const partnerId = localStorage.getItem('textsms_partnerid') || import.meta.env.VITE_TEXTSMS_PARTNER_ID || '';
-    const shortcode = localStorage.getItem('textsms_shortcode') || import.meta.env.VITE_TEXTSMS_SHORTCODE || 'TextSMS';
+    const stored = localStorage.getItem('textsms_apikey');
+    const apiKey = (stored && stored.trim() && stored !== 'eebf1d2e1d9df231eec7e63687dc1975')
+      ? stored.trim()
+      : (import.meta.env.VITE_TEXTSMS_API_KEY || SMSService.DEFAULT_API_KEY);
+
+    const storedPartnerId = localStorage.getItem('textsms_partnerid');
+    const partnerId = (storedPartnerId && storedPartnerId.trim())
+      ? storedPartnerId.trim()
+      : (import.meta.env.VITE_TEXTSMS_PARTNER_ID || SMSService.DEFAULT_PARTNER_ID);
+
+    const storedShortcode = localStorage.getItem('textsms_shortcode');
+    const shortcode = (storedShortcode && storedShortcode.trim())
+      ? storedShortcode.trim()
+      : (import.meta.env.VITE_TEXTSMS_SHORTCODE || SMSService.DEFAULT_SHORTCODE);
+
     return { apiKey, partnerId, shortcode };
   }
 

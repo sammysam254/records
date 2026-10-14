@@ -15,9 +15,16 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onClose,
   onShowToast
 }) => {
-  // TextSMS config
-  const [apiKey, setApiKey] = useState(() => localStorage.getItem('textsms_apikey') || import.meta.env.VITE_TEXTSMS_API_KEY || 'eebf1d2e1d9df231eec7e63687dc1975');
-  const [partnerId, setPartnerId] = useState(() => localStorage.getItem('textsms_partnerid') || import.meta.env.VITE_TEXTSMS_PARTNER_ID || '');
+  // TextSMS config (Hardcoded for Vertex Digital / TextSMS)
+  const [apiKey, setApiKey] = useState(() => {
+    const saved = localStorage.getItem('textsms_apikey');
+    if (!saved || saved === 'eebf1d2e1d9df231eec7e63687dc1975') {
+      localStorage.setItem('textsms_apikey', 'f2cd8d3d47237030b36034a24b7b3b2b');
+      return 'f2cd8d3d47237030b36034a24b7b3b2b';
+    }
+    return saved;
+  });
+  const [partnerId, setPartnerId] = useState(() => localStorage.getItem('textsms_partnerid') || import.meta.env.VITE_TEXTSMS_PARTNER_ID || '16450');
   const [shortcode, setShortcode] = useState(() => localStorage.getItem('textsms_shortcode') || import.meta.env.VITE_TEXTSMS_SHORTCODE || 'TextSMS');
 
   // Test SMS phone

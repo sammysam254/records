@@ -3,25 +3,25 @@ import type { UserProfile, WeeklySubmission, SMSLog } from '../types';
 import { DataService } from '../services/dataService';
 import { SMSService } from '../services/smsService';
 import { extractDeviceSerial, getDeviceOpenUrl } from '../utils/deviceHelper';
-import { 
-  Users, 
-  CheckCircle2, 
-  DollarSign, 
-  Clock, 
-  Send, 
-  ExternalLink, 
-  MessageSquare, 
-  Search, 
-  RefreshCw, 
-  Coins, 
-  Wallet, 
-  LayoutGrid, 
-  Table as TableIcon, 
-  Copy, 
-  Check, 
-  Edit3, 
-  X, 
-  Filter, 
+import {
+  Users,
+  CheckCircle2,
+  DollarSign,
+  Clock,
+  Send,
+  ExternalLink,
+  MessageSquare,
+  Search,
+  RefreshCw,
+  Coins,
+  Wallet,
+  LayoutGrid,
+  Table as TableIcon,
+  Copy,
+  Check,
+  Edit3,
+  X,
+  Filter,
   ArrowUpDown,
   Smartphone
 } from 'lucide-react';
@@ -287,13 +287,13 @@ export const AdminView: React.FC<AdminViewProps> = ({
 
   return (
     <div className="page-container">
-      
+
       {/* Top Admin Summary Cards (Mobile-friendly 2x2 grid) */}
       <div className="stats-grid">
-        
+
         {/* Card 1: Registered Users & Balances */}
-        <div 
-          className="glass-panel" 
+        <div
+          className="glass-panel"
           onClick={() => setActiveTab('users')}
           style={{ padding: '1.25rem', cursor: 'pointer', border: activeTab === 'users' ? '1px solid var(--accent-cyan)' : undefined }}
           title="Click to view all registered users and their balances"
@@ -313,8 +313,8 @@ export const AdminView: React.FC<AdminViewProps> = ({
         </div>
 
         {/* Card 2: Total Wallet Balances */}
-        <div 
-          className="glass-panel" 
+        <div
+          className="glass-panel"
           onClick={() => setActiveTab('users')}
           style={{ padding: '1.25rem', cursor: 'pointer', border: '1px solid rgba(16, 185, 129, 0.3)' }}
           title="Total balance across all registered accounts"
@@ -334,8 +334,8 @@ export const AdminView: React.FC<AdminViewProps> = ({
         </div>
 
         {/* Card 3: Pending Approvals */}
-        <div 
-          className="glass-panel" 
+        <div
+          className="glass-panel"
           onClick={() => setActiveTab('submissions')}
           style={{ padding: '1.25rem', cursor: 'pointer', borderColor: pendingCount > 0 ? 'rgba(245, 158, 11, 0.5)' : undefined }}
           title="Click to view submissions awaiting verification"
@@ -355,8 +355,8 @@ export const AdminView: React.FC<AdminViewProps> = ({
         </div>
 
         {/* Card 4: Paid Disbursements */}
-        <div 
-          className="glass-panel" 
+        <div
+          className="glass-panel"
           onClick={() => setActiveTab('submissions')}
           style={{ padding: '1.25rem', cursor: 'pointer' }}
           title="Total completed payout disbursements"
@@ -440,7 +440,7 @@ export const AdminView: React.FC<AdminViewProps> = ({
           ═══════════════════════════════════════════════════════════ */}
       {activeTab === 'users' && (
         <div className="glass-panel" style={{ padding: '1.5rem' }}>
-          
+
           {/* Header & Users Summary Metrics */}
           <div style={{ marginBottom: '1.25rem' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.75rem', marginBottom: '0.85rem' }}>
@@ -548,7 +548,7 @@ export const AdminView: React.FC<AdminViewProps> = ({
 
             {/* Filter Pills & Sorter Row */}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem', flexWrap: 'wrap' }}>
-              
+
               {/* Balance Filter Pills */}
               <div style={{ display: 'flex', gap: '0.35rem', alignItems: 'center', flexWrap: 'wrap' }}>
                 <span style={{ fontSize: '0.72rem', color: 'var(--text-dim)', fontWeight: 600, marginRight: '0.2rem' }}>
@@ -872,40 +872,40 @@ export const AdminView: React.FC<AdminViewProps> = ({
                             {u.device_pin || '----'}
                           </span>
                         </td>
-                      <td>
-                        <div style={{ display: 'flex', gap: '0.4rem' }}>
-                          <button
-                            onClick={() => handleOpenAdjustModal(u)}
-                            className="btn-secondary"
-                            style={{ padding: '0.35rem 0.65rem', fontSize: '0.72rem' }}
-                            title="Adjust wallet balance"
-                          >
-                            <Edit3 size={12} /> Balance
-                          </button>
-                          <button
-                            onClick={async () => {
-                              const msg = `Hello ${u.full_name}, your VertextPay wallet balance is $${u.wallet_balance.toFixed(2)}.`;
-                              const res = await SMSService.sendSMS({
-                                mobile: u.phone_number,
-                                recipientName: u.full_name,
-                                message: msg,
-                                messageType: 'custom',
-                                userId: u.id
-                              });
-                              onShowToast(`SMS sent to ${u.full_name}: ${res.description}`);
-                              onRefresh();
-                            }}
-                            className="btn-secondary"
-                            style={{ padding: '0.35rem 0.65rem', fontSize: '0.72rem' }}
-                            title="Send SMS"
-                          >
-                            <MessageSquare size={12} />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
+                        <td>
+                          <div style={{ display: 'flex', gap: '0.4rem' }}>
+                            <button
+                              onClick={() => handleOpenAdjustModal(u)}
+                              className="btn-secondary"
+                              style={{ padding: '0.35rem 0.65rem', fontSize: '0.72rem' }}
+                              title="Adjust wallet balance"
+                            >
+                              <Edit3 size={12} /> Balance
+                            </button>
+                            <button
+                              onClick={async () => {
+                                const msg = `Hello ${u.full_name}, your VertextPay wallet balance is $${u.wallet_balance.toFixed(2)}.`;
+                                const res = await SMSService.sendSMS({
+                                  mobile: u.phone_number,
+                                  recipientName: u.full_name,
+                                  message: msg,
+                                  messageType: 'custom',
+                                  userId: u.id
+                                });
+                                onShowToast(`SMS sent to ${u.full_name}: ${res.description}`);
+                                onRefresh();
+                              }}
+                              className="btn-secondary"
+                              style={{ padding: '0.35rem 0.65rem', fontSize: '0.72rem' }}
+                              title="Send SMS"
+                            >
+                              <MessageSquare size={12} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -1436,7 +1436,7 @@ export const AdminView: React.FC<AdminViewProps> = ({
             </p>
 
             <form onSubmit={handleSaveBalance} style={{ display: 'flex', flexDirection: 'column', gap: '1.15rem' }}>
-              
+
               {/* Current Balance Display */}
               <div style={{ background: 'rgba(16, 185, 129, 0.08)', border: '1px solid rgba(16, 185, 129, 0.25)', borderRadius: '10px', padding: '0.85rem 1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Current Wallet Balance:</span>

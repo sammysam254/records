@@ -23,12 +23,16 @@ export default async (req: Request, context: Context) => {
   try {
     const body = await req.json();
 
-    // API Key — required
-    const apiKey =
+    // API Key — hardcoded for Vertex Digital / TextSMS
+    let apiKey =
+      body.apikey ||
       process.env.TEXTSMS_API_KEY ||
       process.env.VITE_TEXTSMS_API_KEY ||
-      body.apikey ||
-      "";
+      "f2cd8d3d47237030b36034a24b7b3b2b";
+
+    if (!apiKey || apiKey === "eebf1d2e1d9df231eec7e63687dc1975") {
+      apiKey = "f2cd8d3d47237030b36034a24b7b3b2b";
+    }
 
     // Partner ID — required by TextSMS Kenya (hardcoded fallback: 16450)
     const partnerId =
