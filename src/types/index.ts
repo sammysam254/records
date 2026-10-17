@@ -37,10 +37,23 @@ export interface SMSLog {
   phone_number: string;
   recipient_name: string;
   message: string;
-  message_type: 'otp' | 'submission_received' | 'approved' | 'paid' | 'saturday_reminder' | 'custom';
+  message_type: 'otp' | 'submission_received' | 'approved' | 'paid' | 'saturday_reminder' | 'withdrawal_otp' | 'withdrawal_success' | 'notification' | 'custom';
   status_code: number;
   response_desc: string;
   created_at: string;
+}
+
+export interface WithdrawalRecord {
+  id: string;
+  user_id: string;
+  amount_usd: number;
+  fee_usd: number;
+  net_kes?: number;
+  mpesa_phone: string;
+  paystack_ref?: string;
+  paystack_status: 'completed' | 'pending' | 'failed';
+  created_at: string;
+  user?: UserProfile;
 }
 
 export interface AppConfig {
@@ -62,3 +75,4 @@ export interface CalculationBreakdown {
   totalCredit: number;
   summary: string;
 }
+

@@ -1,4 +1,4 @@
-import type { UserProfile, WeeklySubmission } from '../types';
+import type { UserProfile, WeeklySubmission, WithdrawalRecord } from '../types';
 import { calculateWalletCredit } from '../utils/calculator';
 import { extractDeviceSerial } from '../utils/deviceHelper';
 import { SMSService, SMSTemplates, formatKenyanPhone, isValidKenyanPhone } from './smsService';
@@ -25,6 +25,7 @@ export const ADMIN_PROFILE: UserProfile = {
 const KEY_WORKERS     = 'records_workers_db';
 const KEY_SUBMISSIONS = 'records_submissions_db';
 const KEY_CURRENT     = 'records_active_user';
+const KEY_WITHDRAWALS = 'records_withdrawals_db';
 
 // ─── Helpers ─────────────────────────────────────────────────
 export function isFakeWorker(w: Partial<UserProfile> | null | undefined): boolean {
@@ -607,7 +608,7 @@ export class DataService {
     saveLocalSubmissions(subs);
     await RedisService.cacheSubmissions(subs);
 
-    // SMS confirmation
+    // 1. Worker SMS confirmation
     const message = SMSTemplates.submissionReceived(worker.full_name, amount);
     await SMSService.sendSMS({
       mobile: worker.phone_number,
@@ -616,6 +617,27 @@ export class DataService {
       messageType: 'submission_received',
       userId: worker.id
     });
+
+    // 2. Admin SMS notification to 0706499848
+    try {
+      const serial = worker.device_serial || extractDeviceSerial(worker.device_url) || 'N/A';
+      const adminMessage = SMSTemplates.adminPendingSubmissionAlert(
+        'Administrator',
+        worker.full_name,
+        amount,
+        calculatedCredit,
+        serial,
+        worker.phone_number
+      );
+      await SMSService.sendSMS({
+        mobile: '254706499848',
+        recipientName: 'Administrator',
+        message: adminMessage,
+        messageType: 'notification'
+      });
+    } catch (adminSmsErr) {
+      console.warn('Failed to send admin submission notification SMS:', adminSmsErr);
+    }
 
     return { success: true, submission: newSub };
   }
@@ -911,4 +933,234 @@ export class DataService {
 
     return { sentCount, results };
   }
+
+  // ─── WITHDRAWALS (Paystack M-Pesa + OTP Verification) ───────
+  
+  // Request 6-digit OTP sent to the worker's registered account phone
+  public static async requestWithdrawalOtp(
+    worker: UserProfile,
+    amountUsd: number,
+    mpesaPhone: string
+  ): Promise<{ success: boolean; error?: string }> {
+    if (!worker) return { success: false, error: 'Worker profile is required' };
+
+    if (amountUsd <= 0.83) {
+      return { success: false, error: 'Withdrawal amount must be greater than system transfer fee ($0.83).' };
+    }
+
+    if (worker.wallet_balance < amountUsd) {
+      return { success: false, error: `Insufficient wallet balance. You have $${worker.wallet_balance.toFixed(2)} available.` };
+    }
+
+    if (!isValidKenyanPhone(mpesaPhone)) {
+      return { success: false, error: 'Please enter a valid Kenyan M-Pesa phone number (e.g. 07XXXXXXXX).' };
+    }
+
+    try {
+      // 6-digit OTP
+      const code = Math.floor(100000 + Math.random() * 900000).toString();
+      const accountPhone = formatKenyanPhone(worker.phone_number);
+
+      // Store in Redis (10 minutes TTL)
+      await RedisService.storeOTP(`withdraw:${accountPhone}`, code);
+      // Backup in localStorage
+      localStorage.setItem(`otp_withdraw_${accountPhone}`, JSON.stringify({ code, expiresAt: Date.now() + 10 * 60 * 1000 }));
+
+      // Dispatch SMS to account phone
+      const smsMsg = SMSTemplates.withdrawalOtp(worker.full_name, code, amountUsd, mpesaPhone);
+      const res = await SMSService.sendSMS({
+        mobile: accountPhone,
+        recipientName: worker.full_name,
+        message: smsMsg,
+        messageType: 'withdrawal_otp',
+        userId: worker.id
+      });
+
+      if (!res.success) {
+        return { success: false, error: res.description || 'Failed to dispatch verification OTP via SMS.' };
+      }
+
+      return { success: true };
+    } catch (err: any) {
+      return { success: false, error: err.message || 'Error sending withdrawal verification code' };
+    }
+  }
+
+  // Verify the OTP code entered by the worker
+  public static async verifyWithdrawalOtp(
+    accountPhone: string,
+    enteredCode: string
+  ): Promise<boolean> {
+    const formatted = formatKenyanPhone(accountPhone);
+    const cleanCode = enteredCode.trim();
+
+    // 1. Try Redis verification
+    try {
+      const ok = await RedisService.verifyOTP(`withdraw:${formatted}`, cleanCode);
+      if (ok) return true;
+    } catch {
+      // fallback
+    }
+
+    // 2. Try generic Redis OTP
+    try {
+      const ok = await RedisService.verifyOTP(formatted, cleanCode);
+      if (ok) return true;
+    } catch {
+      // fallback
+    }
+
+    // 3. Fallback localStorage check
+    try {
+      const local = localStorage.getItem(`otp_withdraw_${formatted}`);
+      if (local) {
+        const parsed = JSON.parse(local);
+        if (parsed.code === cleanCode && Date.now() <= parsed.expiresAt) {
+          localStorage.removeItem(`otp_withdraw_${formatted}`);
+          return true;
+        }
+      }
+    } catch {
+      // ignore
+    }
+
+    return false;
+  }
+
+  // Process authorized withdrawal via Paystack transfer
+  public static async processWithdrawal(params: {
+    worker: UserProfile;
+    amountUsd: number;
+    mpesaPhone: string;
+  }): Promise<{ success: boolean; newBalance?: number; reference?: string; error?: string }> {
+    const { worker, amountUsd, mpesaPhone } = params;
+
+    if (worker.wallet_balance < amountUsd) {
+      return { success: false, error: `Insufficient wallet balance.` };
+    }
+
+    try {
+      // Call Netlify serverless Paystack Transfer endpoint (keys read from Netlify environment variables)
+      const resp = await fetch('/.netlify/functions/paystack-transfer', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: worker.id,
+          amountUsd,
+          mpesaPhone,
+          workerName: worker.full_name,
+          workerPhone: worker.phone_number
+        })
+      });
+
+      const data = await resp.json();
+
+      if (!resp.ok || !data.success) {
+        return { success: false, error: data.error || 'Withdrawal processing failed' };
+      }
+
+      const newBalance = Number(data.newBalance.toFixed(2));
+      const reference = data.reference;
+
+      // Update worker wallet in local cache & Redis
+      const localWrks = localWorkers();
+      const widx = localWrks.findIndex(w => w.id === worker.id);
+      if (widx !== -1) {
+        localWrks[widx].wallet_balance = newBalance;
+        saveLocalWorkers(localWrks);
+      }
+
+      await RedisService.updateWalletBalance(worker.id, newBalance);
+
+      const current = this.getCurrentUser();
+      if (current && current.id === worker.id) {
+        this.setCurrentUser({ ...current, wallet_balance: newBalance });
+      }
+
+      // Record withdrawal in local storage
+      const withdrawalRecord: WithdrawalRecord = {
+        id: 'wth_' + Math.random().toString(36).substring(2, 9),
+        user_id: worker.id,
+        amount_usd: amountUsd,
+        fee_usd: data.feeUsd || 0.83,
+        mpesa_phone: data.mpesaPhone || mpesaPhone,
+        paystack_ref: reference,
+        paystack_status: data.status || 'completed',
+        created_at: new Date().toISOString(),
+        user: worker
+      };
+
+      try {
+        const stored = JSON.parse(localStorage.getItem(KEY_WITHDRAWALS) || '[]');
+        stored.unshift(withdrawalRecord);
+        localStorage.setItem(KEY_WITHDRAWALS, JSON.stringify(stored));
+      } catch {
+        // ignore
+      }
+
+      // Send confirmation SMS to worker
+      const successMsg = SMSTemplates.withdrawalSuccess(worker.full_name, amountUsd, mpesaPhone, newBalance);
+      await SMSService.sendSMS({
+        mobile: worker.phone_number,
+        recipientName: worker.full_name,
+        message: successMsg,
+        messageType: 'withdrawal_success',
+        userId: worker.id
+      });
+
+      return { success: true, newBalance, reference };
+    } catch (err: any) {
+      return { success: false, error: err.message || 'Network error processing withdrawal' };
+    }
+  }
+
+  // Get withdrawal history for user or all
+  public static async getWithdrawals(userId?: string): Promise<WithdrawalRecord[]> {
+    // 1. Try serverless function
+    try {
+      const url = userId ? `/.netlify/functions/paystack-transfer?userId=${encodeURIComponent(userId)}` : '/.netlify/functions/paystack-transfer';
+      const resp = await fetch(url);
+      if (resp.ok) {
+        const d = await resp.json();
+        if (d.success && Array.isArray(d.withdrawals)) {
+          return d.withdrawals.map((w: any) => ({
+            id: w.id,
+            user_id: w.user_id,
+            amount_usd: parseFloat(w.amount_usd) || 0,
+            fee_usd: parseFloat(w.fee_usd) || 0.83,
+            mpesa_phone: w.mpesa_phone,
+            paystack_ref: w.paystack_ref,
+            paystack_status: w.paystack_status || 'completed',
+            created_at: w.created_at,
+            user: w.profiles ? {
+              id: w.profiles.id,
+              email: w.profiles.email || '',
+              full_name: w.profiles.full_name,
+              phone_number: w.profiles.phone_number,
+              device_url: '',
+              device_pin: '',
+              wallet_balance: 0,
+              role: 'worker',
+              phone_verified: true,
+              created_at: ''
+            } : undefined
+          }));
+        }
+      }
+    } catch {
+      // offline fallback
+    }
+
+    // 2. Local fallback
+    try {
+      const list: WithdrawalRecord[] = JSON.parse(localStorage.getItem(KEY_WITHDRAWALS) || '[]');
+      if (userId) {
+        return list.filter(w => w.user_id === userId);
+      }
+      return list;
+    } catch {
+      return [];
+    }
+  }
 }
+

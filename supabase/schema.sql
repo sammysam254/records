@@ -262,3 +262,35 @@ FOR SELECT USING (
     auth.uid() = user_id OR public.is_admin() OR
     EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin')
 );
+
+-- ========================================================
+-- 5. WITHDRAWALS TABLE (Paystack Transfers M-Pesa Disbursed)
+-- ========================================================
+CREATE TABLE IF NOT EXISTS public.withdrawals (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+    amount_usd NUMERIC(12, 2) NOT NULL CHECK (amount_usd > 0),
+    fee_usd NUMERIC(12, 2) NOT NULL DEFAULT 0.83,
+    net_kes NUMERIC(12, 2) NOT NULL,
+    mpesa_phone TEXT NOT NULL,
+    paystack_ref TEXT,
+    paystack_status TEXT NOT NULL DEFAULT 'completed',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now())
+);
+
+CREATE INDEX IF NOT EXISTS idx_withdrawals_user_id ON public.withdrawals(user_id);
+CREATE INDEX IF NOT EXISTS idx_withdrawals_created_at ON public.withdrawals(created_at);
+
+ALTER TABLE public.withdrawals ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Users can view own withdrawals or admin all" ON public.withdrawals;
+CREATE POLICY "Users can view own withdrawals or admin all" ON public.withdrawals
+FOR SELECT USING (
+    auth.uid() = user_id OR public.is_admin() OR
+    EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin')
+);
+
+DROP POLICY IF EXISTS "Users can insert own withdrawals" ON public.withdrawals;
+CREATE POLICY "Users can insert own withdrawals" ON public.withdrawals
+FOR INSERT WITH CHECK (auth.uid() = user_id OR public.is_admin());
+

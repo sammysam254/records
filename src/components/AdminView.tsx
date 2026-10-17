@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import type { UserProfile, WeeklySubmission, SMSLog } from '../types';
+import React, { useState, useEffect } from 'react';
+import type { UserProfile, WeeklySubmission, SMSLog, WithdrawalRecord } from '../types';
 import { DataService } from '../services/dataService';
 import { SMSService } from '../services/smsService';
 import { extractDeviceSerial, getDeviceOpenUrl } from '../utils/deviceHelper';
@@ -44,10 +44,25 @@ export const AdminView: React.FC<AdminViewProps> = ({
 }) => {
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState<string>('');
-  const [activeTab, setActiveTab] = useState<'users' | 'submissions' | 'reminders' | 'sms_logs'>('users');
+  const [activeTab, setActiveTab] = useState<'users' | 'submissions' | 'withdrawals' | 'reminders' | 'sms_logs'>('users');
   const [isProcessing, setIsProcessing] = useState<string | null>(null);
   const [balanceInfo, setBalanceInfo] = useState<string | null>(null);
   const [isCheckingBalance, setIsCheckingBalance] = useState(false);
+  const [allWithdrawals, setAllWithdrawals] = useState<WithdrawalRecord[]>([]);
+
+  // Load all withdrawals
+  const loadWithdrawals = async () => {
+    try {
+      const list = await DataService.getWithdrawals();
+      setAllWithdrawals(list);
+    } catch {
+      // ignore
+    }
+  };
+
+  useEffect(() => {
+    loadWithdrawals();
+  }, []);
 
   // Users Tab Filters & View Mode
   const [userRoleFilter, setUserRoleFilter] = useState<'all' | 'worker' | 'admin'>('all');
@@ -199,7 +214,7 @@ export const AdminView: React.FC<AdminViewProps> = ({
       const res = await DataService.approveSubmission(sub.id);
       if (res.success) {
         confetti({ particleCount: 40, spread: 50 });
-        onShowToast(`Approved! $${sub.calculated_credit.toFixed(2)} credited to ${sub.user?.full_name || 'Worker'}'s wallet. SMS sent.`);
+        onShowToast(`Approved! $${sub.calculated_credit.toFixed(2)} credited to ${sub.user?.full_name || 'Worker'}'s wallet. Balance is immediately available for withdrawal.`);
         onRefresh(true);
       } else {
         // Rollback override if failed
@@ -404,6 +419,18 @@ export const AdminView: React.FC<AdminViewProps> = ({
           >
             <Clock size={15} />
             Submissions Hub {pendingCount > 0 && `(${pendingCount} Pending)`}
+          </button>
+
+          <button
+            onClick={() => {
+              setActiveTab('withdrawals');
+              loadWithdrawals();
+            }}
+            className={activeTab === 'withdrawals' ? 'btn-primary' : 'btn-secondary'}
+            style={{ fontSize: '0.82rem', whiteSpace: 'nowrap' }}
+          >
+            <Wallet size={15} />
+            M-Pesa Withdrawals ({allWithdrawals.length})
           </button>
 
           <button
@@ -1395,6 +1422,138 @@ export const AdminView: React.FC<AdminViewProps> = ({
                 </table>
               </div>
             </>
+          )}
+        </div>
+      )}
+
+      {/* ═══════════════════════════════════════════════════════════
+          TAB: M-PESA WITHDRAWALS (PAYSTACK TRANSFERS)
+          ═══════════════════════════════════════════════════════════ */}
+      {activeTab === 'withdrawals' && (
+        <div className="glass-panel" style={{ padding: '1.5rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '0.75rem' }}>
+            <div>
+              <h3 style={{ fontSize: '1.3rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <Wallet size={22} color="var(--accent-emerald)" />
+                M-Pesa Withdrawals Hub (Paystack)
+              </h3>
+              <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>
+                Real-time ledger of worker mobile money cash-outs processed through Paystack Transfers.
+              </p>
+            </div>
+
+            <button
+              onClick={loadWithdrawals}
+              className="btn-secondary"
+              style={{ fontSize: '0.78rem' }}
+            >
+              <RefreshCw size={13} /> Refresh Records
+            </button>
+          </div>
+
+          {/* Quick Metrics Bar */}
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+            gap: '1rem',
+            marginBottom: '1.25rem'
+          }}>
+            <div style={{ background: 'rgba(10, 13, 20, 0.6)', border: '1px solid var(--border-subtle)', borderRadius: '10px', padding: '0.85rem' }}>
+              <span style={{ fontSize: '0.72rem', color: 'var(--text-dim)', textTransform: 'uppercase' }}>Total Withdrawals</span>
+              <div style={{ fontSize: '1.4rem', fontWeight: 800, color: '#f8fafc', marginTop: '0.2rem' }}>
+                {allWithdrawals.length}
+              </div>
+            </div>
+            <div style={{ background: 'rgba(10, 13, 20, 0.6)', border: '1px solid var(--border-subtle)', borderRadius: '10px', padding: '0.85rem' }}>
+              <span style={{ fontSize: '0.72rem', color: 'var(--text-dim)', textTransform: 'uppercase' }}>Gross Withdrawn</span>
+              <div style={{ fontSize: '1.4rem', fontWeight: 800, color: 'var(--accent-cyan)', marginTop: '0.2rem' }}>
+                ${allWithdrawals.reduce((sum, w) => sum + w.amount_usd, 0).toFixed(2)}
+              </div>
+            </div>
+            <div style={{ background: 'rgba(10, 13, 20, 0.6)', border: '1px solid var(--border-subtle)', borderRadius: '10px', padding: '0.85rem' }}>
+              <span style={{ fontSize: '0.72rem', color: 'var(--text-dim)', textTransform: 'uppercase' }}>Transfer Fees Deducted</span>
+              <div style={{ fontSize: '1.4rem', fontWeight: 800, color: '#fbbf24', marginTop: '0.2rem' }}>
+                ${allWithdrawals.reduce((sum, w) => sum + w.fee_usd, 0).toFixed(2)}
+              </div>
+            </div>
+            <div style={{ background: 'rgba(10, 13, 20, 0.6)', border: '1px solid var(--border-subtle)', borderRadius: '10px', padding: '0.85rem' }}>
+              <span style={{ fontSize: '0.72rem', color: 'var(--text-dim)', textTransform: 'uppercase' }}>Net Disbursed</span>
+              <div style={{ fontSize: '1.4rem', fontWeight: 800, color: 'var(--accent-emerald)', marginTop: '0.2rem' }}>
+                ${allWithdrawals.reduce((sum, w) => sum + Math.max(0, w.amount_usd - w.fee_usd), 0).toFixed(2)}
+              </div>
+            </div>
+          </div>
+
+          {allWithdrawals.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '3.5rem 1rem', color: 'var(--text-dim)' }}>
+              <Wallet size={36} style={{ margin: '0 auto 0.75rem', opacity: 0.5 }} />
+              <p>No withdrawal requests processed yet.</p>
+            </div>
+          ) : (
+            <div className="table-responsive">
+              <table className="custom-table">
+                <thead>
+                  <tr>
+                    <th>Date / Time</th>
+                    <th>Worker</th>
+                    <th>Gross Withdrawn</th>
+                    <th>System Fee</th>
+                    <th>Net Disbursed</th>
+                    <th>M-Pesa Line</th>
+                    <th>Paystack Ref</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {allWithdrawals.map(wth => (
+                    <tr key={wth.id}>
+                      <td>
+                        <div style={{ fontWeight: 600 }}>{new Date(wth.created_at).toLocaleDateString()}</div>
+                        <div style={{ fontSize: '0.7rem', color: 'var(--text-dim)' }}>
+                          {new Date(wth.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </div>
+                      </td>
+                      <td>
+                        <strong style={{ color: '#f8fafc' }}>{wth.user?.full_name || 'Worker'}</strong>
+                        <div style={{ fontSize: '0.7rem', color: 'var(--text-dim)' }}>
+                          {wth.user?.phone_number || ''}
+                        </div>
+                      </td>
+                      <td>
+                        <strong style={{ fontSize: '0.95rem', color: '#f8fafc' }}>
+                          ${wth.amount_usd.toFixed(2)}
+                        </strong>
+                      </td>
+                      <td>
+                        <span style={{ color: '#fbbf24', fontSize: '0.85rem' }}>
+                          -${wth.fee_usd.toFixed(2)}
+                        </span>
+                      </td>
+                      <td>
+                        <strong style={{ color: 'var(--accent-emerald)', fontSize: '0.95rem' }}>
+                          ${Math.max(0, wth.amount_usd - wth.fee_usd).toFixed(2)}
+                        </strong>
+                      </td>
+                      <td>
+                        <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.85rem' }}>
+                          {wth.mpesa_phone}
+                        </span>
+                      </td>
+                      <td>
+                        <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.75rem', color: 'var(--accent-cyan)' }}>
+                          {wth.paystack_ref || 'N/A'}
+                        </span>
+                      </td>
+                      <td>
+                        <span className="badge badge-approved" style={{ textTransform: 'capitalize' }}>
+                          <CheckCircle2 size={12} /> {wth.paystack_status}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </div>
       )}

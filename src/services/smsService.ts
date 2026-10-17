@@ -4,7 +4,7 @@ export interface SendSMSParams {
   mobile: string;
   recipientName: string;
   message: string;
-  messageType?: 'otp' | 'submission_received' | 'approved' | 'paid' | 'saturday_reminder' | 'custom';
+  messageType?: 'otp' | 'submission_received' | 'approved' | 'paid' | 'saturday_reminder' | 'withdrawal_otp' | 'withdrawal_success' | 'notification' | 'custom';
   userId?: string;
 }
 
@@ -60,11 +60,20 @@ export const SMSTemplates = {
   submissionReceived: (fullName: string, amount: number) => 
     `Hello ${fullName}, your weekly earnings submission of $${amount.toFixed(2)} has been received and is waiting for admin approval.`,
 
+  adminPendingSubmissionAlert: (adminName: string, workerName: string, amount: number, credit: number, serial: string, phone: string) =>
+    `Hello ${adminName}, worker ${workerName} (Serial: ${serial || 'N/A'}, Phone: ${phone}) has submitted earnings of $${amount.toFixed(2)} (Credit: $${credit.toFixed(2)}) requiring your approval.`,
+
   approvedAndCredited: (fullName: string, amountMade: number, credited: number, currentBalance: number) => 
     `Hello ${fullName}, your weekly earnings of $${amountMade.toFixed(2)} has been approved. $${credited.toFixed(2)} has been credited to your wallet. Current wallet balance: $${currentBalance.toFixed(2)}.`,
 
   markedAsPaid: (fullName: string, amountPaid: number, remainingBalance: number) => 
     `Hello ${fullName}, admin has paid your earnings of $${amountPaid.toFixed(2)}. This amount has been deducted from your wallet. Your new balance is $${remainingBalance.toFixed(2)}.`,
+
+  withdrawalOtp: (fullName: string, code: string, amount: number, mpesaNumber: string) =>
+    `Hello ${fullName}, your withdrawal verification code is ${code}. Enter this code to authorize your withdrawal of $${amount.toFixed(2)} to M-Pesa ${mpesaNumber}.`,
+
+  withdrawalSuccess: (fullName: string, amount: number, mpesaNumber: string, remainingBalance: number) =>
+    `Hello ${fullName}, your withdrawal of $${amount.toFixed(2)} to M-Pesa ${mpesaNumber} has been processed successfully. Your new wallet balance is $${remainingBalance.toFixed(2)}.`,
 
   saturdayReminder: (fullName: string) => 
     `Hello ${fullName}, it's Saturday! This is a reminder to submit your weekly earnings through your dashboard.`

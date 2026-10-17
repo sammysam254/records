@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
-import type { UserProfile, WeeklySubmission } from '../types';
+import React, { useState, useEffect } from 'react';
+import type { UserProfile, WeeklySubmission, WithdrawalRecord } from '../types';
 import { getCalculationBreakdown } from '../utils/calculator';
 import { extractDeviceSerial } from '../utils/deviceHelper';
 import { DataService } from '../services/dataService';
+import { WithdrawModal } from './WithdrawModal';
 import { 
   Wallet, 
   ExternalLink, 
@@ -18,7 +19,8 @@ import {
   DollarSign,
   LogIn,
   UserPlus,
-  Lock
+  Lock,
+  ArrowDownToLine
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
@@ -42,6 +44,25 @@ export const WorkerView: React.FC<WorkerViewProps> = ({
   const [copiedPin, setCopiedPin] = useState(false);
   const [copiedSerial, setCopiedSerial] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isWithdrawOpen, setIsWithdrawOpen] = useState(false);
+  const [historyTab, setHistoryTab] = useState<'submissions' | 'withdrawals'>('submissions');
+  const [myWithdrawals, setMyWithdrawals] = useState<WithdrawalRecord[]>([]);
+
+  // Load worker's withdrawal history
+  const loadWithdrawals = async () => {
+    if (worker) {
+      try {
+        const wths = await DataService.getWithdrawals(worker.id);
+        setMyWithdrawals(wths);
+      } catch {
+        // ignore
+      }
+    }
+  };
+
+  useEffect(() => {
+    loadWithdrawals();
+  }, [worker]);
 
   // Filter submissions for this worker (or empty if visitor)
   const mySubmissions = worker ? submissions.filter(s => s.user_id === worker.id) : [];
@@ -269,17 +290,43 @@ export const WorkerView: React.FC<WorkerViewProps> = ({
             </div>
           </div>
 
-          {worker ? (
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '1rem', paddingTop: '0.85rem', borderTop: '1px solid var(--border-subtle)', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-              <div>
-                <strong style={{ color: '#f8fafc' }}>{worker.full_name}</strong>
-                <div style={{ fontSize: '0.72rem', color: 'var(--text-dim)' }}>{worker.phone_number}</div>
+            {worker ? (
+            <>
+              {/* Withdraw Button */}
+              <div style={{ marginTop: '0.85rem' }}>
+                <button
+                  type="button"
+                  onClick={() => setIsWithdrawOpen(true)}
+                  disabled={worker.wallet_balance <= 0.83}
+                  className="btn-primary"
+                  style={{
+                    width: '100%',
+                    justifyContent: 'center',
+                    padding: '0.65rem 1rem',
+                    fontSize: '0.88rem',
+                    fontWeight: 700,
+                    background: worker.wallet_balance > 0.83
+                      ? 'linear-gradient(135deg, #10b981 0%, #06b6d4 100%)'
+                      : 'rgba(255, 255, 255, 0.05)',
+                    cursor: worker.wallet_balance > 0.83 ? 'pointer' : 'not-allowed',
+                    opacity: worker.wallet_balance > 0.83 ? 1 : 0.6
+                  }}
+                >
+                  <ArrowDownToLine size={16} /> Withdraw to M-Pesa
+                </button>
               </div>
-              <div style={{ textAlign: 'right' }}>
-                <div>{mySubmissions.length} Submissions</div>
-                <div style={{ fontSize: '0.72rem', color: 'var(--accent-emerald)' }}>Active Account</div>
+
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '0.85rem', paddingTop: '0.85rem', borderTop: '1px solid var(--border-subtle)', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                <div>
+                  <strong style={{ color: '#f8fafc' }}>{worker.full_name}</strong>
+                  <div style={{ fontSize: '0.72rem', color: 'var(--text-dim)' }}>{worker.phone_number}</div>
+                </div>
+                <div style={{ textAlign: 'right' }}>
+                  <div>{mySubmissions.length} Submissions</div>
+                  <div style={{ fontSize: '0.72rem', color: 'var(--accent-emerald)' }}>Active Account</div>
+                </div>
               </div>
-            </div>
+            </>
           ) : (
             <div style={{ marginTop: '0.85rem', paddingTop: '0.85rem', borderTop: '1px solid var(--border-subtle)' }}>
               <button
@@ -608,19 +655,54 @@ export const WorkerView: React.FC<WorkerViewProps> = ({
         </form>
       </div>
 
-      {/* Submissions History (Cards on mobile, Table on Desktop) */}
+      {/* Submissions & Withdrawals History (Cards on mobile, Table on Desktop) */}
       <div className="glass-panel" style={{ padding: '1.5rem' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.25rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '0.75rem' }}>
           <div>
-            <h3 style={{ fontSize: '1.2rem', fontWeight: 800 }}>My Weekly Submissions</h3>
+            <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.35rem' }}>
+              <button
+                type="button"
+                onClick={() => setHistoryTab('submissions')}
+                style={{
+                  background: historyTab === 'submissions' ? 'var(--accent-cyan)' : 'rgba(255,255,255,0.05)',
+                  color: historyTab === 'submissions' ? '#0f172a' : 'var(--text-muted)',
+                  border: 'none',
+                  borderRadius: '8px',
+                  padding: '0.4rem 0.85rem',
+                  fontWeight: 700,
+                  fontSize: '0.85rem',
+                  cursor: 'pointer'
+                }}
+              >
+                Weekly Submissions ({mySubmissions.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setHistoryTab('withdrawals')}
+                style={{
+                  background: historyTab === 'withdrawals' ? 'var(--accent-emerald)' : 'rgba(255,255,255,0.05)',
+                  color: historyTab === 'withdrawals' ? '#0f172a' : 'var(--text-muted)',
+                  border: 'none',
+                  borderRadius: '8px',
+                  padding: '0.4rem 0.85rem',
+                  fontWeight: 700,
+                  fontSize: '0.85rem',
+                  cursor: 'pointer'
+                }}
+              >
+                M-Pesa Withdrawals ({myWithdrawals.length})
+              </button>
+            </div>
             <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
-              {worker 
-                ? 'Records of your submitted earnings, approval status, and credited amounts.' 
-                : 'Sign in to access your weekly records and payment disbursement history.'}
+              {historyTab === 'submissions'
+                ? 'Records of your submitted earnings, approval status, and credited amounts.'
+                : 'History of M-Pesa mobile money withdrawals disbursed via Paystack.'}
             </p>
           </div>
           {worker && (
-            <span className="badge badge-paid" style={{ fontSize: '0.68rem' }}>{mySubmissions.length} Records</span>
+            <span className="badge badge-paid" style={{ fontSize: '0.68rem' }}>
+              {historyTab === 'submissions' ? `${mySubmissions.length} Submissions` : `${myWithdrawals.length} Withdrawals`}
+            </span>
           )}
         </div>
 
@@ -639,17 +721,128 @@ export const WorkerView: React.FC<WorkerViewProps> = ({
               <LogIn size={14} /> Worker Sign In
             </button>
           </div>
-        ) : mySubmissions.length === 0 ? (
+        ) : historyTab === 'submissions' ? (
+          mySubmissions.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '3rem 1rem', color: 'var(--text-dim)' }}>
+              <Clock size={36} style={{ margin: '0 auto 0.75rem', opacity: 0.5 }} />
+              <p>No earnings submitted yet. Use the form above to submit your Saturday earnings.</p>
+            </div>
+          ) : (
+            <>
+              {/* Mobile Cards View */}
+              <div className="show-on-mobile" style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                {mySubmissions.map(sub => (
+                  <div key={sub.id} style={{
+                    background: 'rgba(10, 13, 20, 0.7)',
+                    border: '1px solid var(--border-subtle)',
+                    borderRadius: '12px',
+                    padding: '1rem',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '0.6rem'
+                  }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div style={{ fontWeight: 700, fontSize: '0.9rem' }}>Week of {sub.week_date}</div>
+                      {sub.status === 'pending' && <span className="badge badge-pending">Pending</span>}
+                      {sub.status === 'approved' && <span className="badge badge-approved">Approved</span>}
+                      {sub.status === 'paid' && <span className="badge badge-paid">Paid</span>}
+                      {sub.status === 'rejected' && <span className="badge badge-rejected">Rejected</span>}
+                    </div>
+
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255,255,255,0.02)', padding: '0.6rem 0.75rem', borderRadius: '8px' }}>
+                      <div>
+                        <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)', display: 'block' }}>Submitted</span>
+                        <strong style={{ fontSize: '1rem', color: '#f8fafc' }}>${sub.amount_made.toFixed(2)}</strong>
+                      </div>
+                      <div style={{ textAlign: 'right' }}>
+                        <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)', display: 'block' }}>Wallet Credit</span>
+                        <strong style={{ fontSize: '1rem', color: 'var(--accent-emerald)' }}>+${sub.calculated_credit.toFixed(2)}</strong>
+                      </div>
+                    </div>
+
+                    <div style={{ fontSize: '0.72rem', color: 'var(--text-dim)' }}>
+                      {sub.status === 'pending' && 'Awaiting admin verification'}
+                      {sub.status === 'approved' && `Approved at ${new Date(sub.approved_at || '').toLocaleDateString()}`}
+                      {sub.status === 'paid' && `Paid and disbursed on ${new Date(sub.paid_at || '').toLocaleDateString()}`}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Desktop Table View */}
+              <div className="table-responsive hide-on-mobile">
+                <table className="custom-table">
+                  <thead>
+                    <tr>
+                      <th>Date / Week</th>
+                      <th>Submitted Amount</th>
+                      <th>Wallet Credit</th>
+                      <th>Status</th>
+                      <th>Notes</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {mySubmissions.map((sub) => (
+                      <tr key={sub.id}>
+                        <td>
+                          <div style={{ fontWeight: 600 }}>{sub.week_date}</div>
+                          <div style={{ fontSize: '0.7rem', color: 'var(--text-dim)' }}>
+                            {new Date(sub.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </div>
+                        </td>
+                        <td>
+                          <span style={{ fontWeight: 700, fontSize: '0.95rem' }}>
+                            ${sub.amount_made.toFixed(2)}
+                          </span>
+                        </td>
+                        <td>
+                          <span style={{ fontWeight: 700, color: 'var(--accent-emerald)', fontSize: '0.95rem' }}>
+                            +${sub.calculated_credit.toFixed(2)}
+                          </span>
+                        </td>
+                        <td>
+                          {sub.status === 'pending' && (
+                            <span className="badge badge-pending">
+                              <Clock size={12} /> Pending Approval
+                            </span>
+                          )}
+                          {sub.status === 'approved' && (
+                            <span className="badge badge-approved">
+                              <CheckCircle2 size={12} /> Approved (Credited)
+                            </span>
+                          )}
+                          {sub.status === 'paid' && (
+                            <span className="badge badge-paid">
+                              <DollarSign size={12} /> Paid &amp; Disbursed
+                            </span>
+                          )}
+                          {sub.status === 'rejected' && (
+                            <span className="badge badge-rejected">Rejected</span>
+                          )}
+                        </td>
+                        <td style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                          {sub.status === 'pending' && 'Awaiting administrator verification'}
+                          {sub.status === 'approved' && `Approved at ${new Date(sub.approved_at || '').toLocaleDateString()}`}
+                          {sub.status === 'paid' && `Paid and deducted from wallet on ${new Date(sub.paid_at || '').toLocaleDateString()}`}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )
+        ) : myWithdrawals.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '3rem 1rem', color: 'var(--text-dim)' }}>
-            <Clock size={36} style={{ margin: '0 auto 0.75rem', opacity: 0.5 }} />
-            <p>No earnings submitted yet. Use the form above to submit your Saturday earnings.</p>
+            <Wallet size={36} style={{ margin: '0 auto 0.75rem', opacity: 0.5 }} />
+            <p>No withdrawals processed yet. Click &quot;Withdraw to M-Pesa&quot; on your wallet card above to cash out.</p>
           </div>
         ) : (
           <>
-            {/* Mobile Cards View */}
+            {/* Mobile Cards for Withdrawals */}
             <div className="show-on-mobile" style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-              {mySubmissions.map(sub => (
-                <div key={sub.id} style={{
+              {myWithdrawals.map(wth => (
+                <div key={wth.id} style={{
                   background: 'rgba(10, 13, 20, 0.7)',
                   border: '1px solid var(--border-subtle)',
                   borderRadius: '12px',
@@ -659,88 +852,91 @@ export const WorkerView: React.FC<WorkerViewProps> = ({
                   gap: '0.6rem'
                 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div style={{ fontWeight: 700, fontSize: '0.9rem' }}>Week of {sub.week_date}</div>
-                    {sub.status === 'pending' && <span className="badge badge-pending">Pending</span>}
-                    {sub.status === 'approved' && <span className="badge badge-approved">Approved</span>}
-                    {sub.status === 'paid' && <span className="badge badge-paid">Paid</span>}
-                    {sub.status === 'rejected' && <span className="badge badge-rejected">Rejected</span>}
+                    <div style={{ fontWeight: 700, fontSize: '0.9rem' }}>
+                      {new Date(wth.created_at).toLocaleDateString()}
+                    </div>
+                    <span className="badge badge-approved" style={{ textTransform: 'capitalize' }}>
+                      {wth.paystack_status}
+                    </span>
                   </div>
 
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255,255,255,0.02)', padding: '0.6rem 0.75rem', borderRadius: '8px' }}>
                     <div>
-                      <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)', display: 'block' }}>Submitted</span>
-                      <strong style={{ fontSize: '1rem', color: '#f8fafc' }}>${sub.amount_made.toFixed(2)}</strong>
+                      <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)', display: 'block' }}>Withdrawn</span>
+                      <strong style={{ fontSize: '1rem', color: '#f8fafc' }}>${wth.amount_usd.toFixed(2)}</strong>
+                    </div>
+                    <div>
+                      <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)', display: 'block' }}>Transfer Fee</span>
+                      <span style={{ fontSize: '0.85rem', color: '#fbbf24' }}>-${wth.fee_usd.toFixed(2)}</span>
                     </div>
                     <div style={{ textAlign: 'right' }}>
-                      <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)', display: 'block' }}>Wallet Credit</span>
-                      <strong style={{ fontSize: '1rem', color: 'var(--accent-emerald)' }}>+${sub.calculated_credit.toFixed(2)}</strong>
+                      <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)', display: 'block' }}>Net Disbursed</span>
+                      <strong style={{ fontSize: '1rem', color: 'var(--accent-emerald)' }}>
+                        ${Math.max(0, wth.amount_usd - wth.fee_usd).toFixed(2)}
+                      </strong>
                     </div>
                   </div>
 
-                  <div style={{ fontSize: '0.72rem', color: 'var(--text-dim)' }}>
-                    {sub.status === 'pending' && 'Awaiting admin verification'}
-                    {sub.status === 'approved' && `Approved at ${new Date(sub.approved_at || '').toLocaleDateString()}`}
-                    {sub.status === 'paid' && `Paid and disbursed on ${new Date(sub.paid_at || '').toLocaleDateString()}`}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.72rem', color: 'var(--text-dim)' }}>
+                    <span>To M-Pesa: {wth.mpesa_phone}</span>
+                    <span style={{ fontFamily: 'var(--font-mono)' }}>Ref: {wth.paystack_ref || 'N/A'}</span>
                   </div>
                 </div>
               ))}
             </div>
 
-            {/* Desktop Table View */}
+            {/* Desktop Table for Withdrawals */}
             <div className="table-responsive hide-on-mobile">
               <table className="custom-table">
                 <thead>
                   <tr>
-                    <th>Date / Week</th>
-                    <th>Submitted Amount</th>
-                    <th>Wallet Credit</th>
+                    <th>Date &amp; Time</th>
+                    <th>Gross Withdrawn</th>
+                    <th>Transfer Fee</th>
+                    <th>Net Disbursed</th>
+                    <th>M-Pesa Line</th>
+                    <th>Paystack Reference</th>
                     <th>Status</th>
-                    <th>Notes</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {mySubmissions.map((sub) => (
-                    <tr key={sub.id}>
+                  {myWithdrawals.map(wth => (
+                    <tr key={wth.id}>
                       <td>
-                        <div style={{ fontWeight: 600 }}>{sub.week_date}</div>
+                        <div style={{ fontWeight: 600 }}>{new Date(wth.created_at).toLocaleDateString()}</div>
                         <div style={{ fontSize: '0.7rem', color: 'var(--text-dim)' }}>
-                          {new Date(sub.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          {new Date(wth.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                         </div>
                       </td>
                       <td>
-                        <span style={{ fontWeight: 700, fontSize: '0.95rem' }}>
-                          ${sub.amount_made.toFixed(2)}
+                        <strong style={{ fontSize: '0.95rem', color: '#f8fafc' }}>
+                          ${wth.amount_usd.toFixed(2)}
+                        </strong>
+                      </td>
+                      <td>
+                        <span style={{ color: '#fbbf24', fontSize: '0.85rem' }}>
+                          -${wth.fee_usd.toFixed(2)}
                         </span>
                       </td>
                       <td>
-                        <span style={{ fontWeight: 700, color: 'var(--accent-emerald)', fontSize: '0.95rem' }}>
-                          +${sub.calculated_credit.toFixed(2)}
+                        <strong style={{ color: 'var(--accent-emerald)', fontSize: '0.95rem' }}>
+                          ${Math.max(0, wth.amount_usd - wth.fee_usd).toFixed(2)}
+                        </strong>
+                      </td>
+                      <td>
+                        <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.85rem' }}>
+                          {wth.mpesa_phone}
                         </span>
                       </td>
                       <td>
-                        {sub.status === 'pending' && (
-                          <span className="badge badge-pending">
-                            <Clock size={12} /> Pending Approval
-                          </span>
-                        )}
-                        {sub.status === 'approved' && (
-                          <span className="badge badge-approved">
-                            <CheckCircle2 size={12} /> Approved (Credited)
-                          </span>
-                        )}
-                        {sub.status === 'paid' && (
-                          <span className="badge badge-paid">
-                            <DollarSign size={12} /> Paid &amp; Disbursed
-                          </span>
-                        )}
-                        {sub.status === 'rejected' && (
-                          <span className="badge badge-rejected">Rejected</span>
-                        )}
+                        <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.78rem', color: 'var(--accent-cyan)' }}>
+                          {wth.paystack_ref || 'N/A'}
+                        </span>
                       </td>
-                      <td style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
-                        {sub.status === 'pending' && 'Awaiting administrator verification'}
-                        {sub.status === 'approved' && `Approved at ${new Date(sub.approved_at || '').toLocaleDateString()}`}
-                        {sub.status === 'paid' && `Paid and deducted from wallet on ${new Date(sub.paid_at || '').toLocaleDateString()}`}
+                      <td>
+                        <span className="badge badge-approved" style={{ textTransform: 'capitalize' }}>
+                          <CheckCircle2 size={12} /> {wth.paystack_status}
+                        </span>
                       </td>
                     </tr>
                   ))}
@@ -750,6 +946,18 @@ export const WorkerView: React.FC<WorkerViewProps> = ({
           </>
         )}
       </div>
+
+      {/* Withdraw Modal */}
+      <WithdrawModal
+        isOpen={isWithdrawOpen}
+        worker={worker}
+        onClose={() => setIsWithdrawOpen(false)}
+        onSuccess={() => {
+          onRefresh();
+          loadWithdrawals();
+        }}
+        onShowToast={onShowToast}
+      />
 
     </div>
   );
