@@ -246,9 +246,91 @@ export default async (req: Request, _context: Context) => {
         });
       }
 
+      // Helper to sync Redis cache
+      const syncRedisBalance = async (targetUserId: string, newBal: number) => {
+        const redisUrl =
+          process.env.UPSTASH_REDIS_REST_URL ||
+          process.env.VITE_UPSTASH_REDIS_REST_URL ||
+          "https://destined-spider-220274.upstash.io";
+        const redisToken =
+          process.env.UPSTASH_REDIS_REST_TOKEN ||
+          process.env.VITE_UPSTASH_REDIS_REST_TOKEN ||
+          "gQAAAAAAA1xyAAIgcDJmNjlhM2M2NWU3ZTc0NTg2OTNjNmY1MjFiMWYxZGQ4ZQ";
+
+        if (!redisUrl || !redisToken) return;
+
+        try {
+          const cleanUrl = redisUrl.endsWith("/") ? redisUrl.slice(0, -1) : redisUrl;
+          // 1. Update wallet:<userId>
+          await fetch(`${cleanUrl}/set/wallet:${targetUserId}/${newBal}`, {
+            headers: { Authorization: `Bearer ${redisToken}` },
+          });
+
+          // 2. Update worker in workers:all
+          const wRes = await fetch(`${cleanUrl}/get/workers:all`, {
+            headers: { Authorization: `Bearer ${redisToken}` },
+          });
+          const wData = await wRes.json();
+          if (wData.result) {
+            const list = typeof wData.result === "string" ? JSON.parse(wData.result) : wData.result;
+            const idx = list.findIndex((w: any) => w.id === targetUserId);
+            if (idx !== -1) {
+              list[idx].wallet_balance = newBal;
+              await fetch(`${cleanUrl}/set/workers:all`, {
+                method: "POST",
+                headers: {
+                  Authorization: `Bearer ${redisToken}`,
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify(JSON.stringify(list)),
+              });
+            }
+          }
+        } catch (err) {
+          console.warn("[Redis Balance Sync Warning]:", err);
+        }
+      };
+
+      // Create weekly submission with serverless admin (bypasses RLS)
+      if (action === "create-submission") {
+        const { userId, amountMade, calculatedCredit, weekDate } = body;
+        if (!userId || amountMade === undefined) {
+          return new Response(JSON.stringify({ success: false, error: "userId and amountMade are required" }), {
+            status: 400,
+            headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
+          });
+        }
+
+        const { data: sub, error: subErr } = await sbAdmin
+          .from("weekly_submissions")
+          .insert([
+            {
+              user_id: userId,
+              amount_made: Number(parseFloat(amountMade).toFixed(2)),
+              calculated_credit: Number(parseFloat(calculatedCredit || 0).toFixed(2)),
+              status: "pending",
+              week_date: weekDate || new Date().toISOString().split("T")[0],
+            },
+          ])
+          .select("*, profiles:user_id(*)")
+          .single();
+
+        if (subErr) {
+          return new Response(JSON.stringify({ success: false, error: subErr.message }), {
+            status: 500,
+            headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
+          });
+        }
+
+        return new Response(JSON.stringify({ success: true, submission: sub }), {
+          status: 200,
+          headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
+        });
+      }
+
       // Approve submission and credit worker balance
       if (action === "approve-submission") {
-        const { submissionId } = body;
+        const { submissionId, userId, credit } = body;
         if (!submissionId) {
           return new Response(JSON.stringify({ success: false, error: "submissionId is required" }), {
             status: 400,
@@ -256,57 +338,49 @@ export default async (req: Request, _context: Context) => {
           });
         }
 
-        // Try using the database RPC if available, or direct admin update
-        try {
-          const { data: rpcRes, error: rpcErr } = await sbAdmin.rpc("approve_submission", {
-            submission_id: submissionId,
-          });
+        const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(submissionId);
+        let targetUserId = userId;
+        let creditAmount = parseFloat(credit || 0);
 
-          if (!rpcErr && rpcRes && rpcRes.success) {
-            return new Response(JSON.stringify({ success: true, ...rpcRes }), {
-              status: 200,
-              headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
-            });
+        // If it's a UUID, update Supabase weekly_submissions
+        if (isUUID) {
+          try {
+            await sbAdmin
+              .from("weekly_submissions")
+              .update({ status: "approved", approved_at: new Date().toISOString() })
+              .eq("id", submissionId);
+
+            if (!targetUserId || !creditAmount) {
+              const { data: sub } = await sbAdmin.from("weekly_submissions").select("*").eq("id", submissionId).single();
+              if (sub) {
+                targetUserId = targetUserId || sub.user_id;
+                creditAmount = creditAmount || parseFloat(sub.calculated_credit || 0);
+              }
+            }
+          } catch (e) {
+            console.warn("DB submission update note:", e);
           }
-        } catch {
-          // fallback to direct admin table update
         }
 
-        // Fallback: direct table updates using sbAdmin
-        const { data: sub, error: subErr } = await sbAdmin
-          .from("weekly_submissions")
-          .select("*, profiles:user_id(*)")
-          .eq("id", submissionId)
-          .single();
-
-        if (subErr || !sub) {
-          return new Response(JSON.stringify({ success: false, error: subErr?.message || "Submission not found" }), {
-            status: 404,
+        if (!targetUserId) {
+          return new Response(JSON.stringify({ success: false, error: "Worker user_id is required" }), {
+            status: 400,
             headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
           });
         }
 
-        const now = new Date().toISOString();
-        const { error: updSubErr } = await sbAdmin
-          .from("weekly_submissions")
-          .update({ status: "approved", approved_at: now })
-          .eq("id", submissionId);
-
-        if (updSubErr) {
-          return new Response(JSON.stringify({ success: false, error: updSubErr.message }), {
-            status: 500,
-            headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
-          });
-        }
-
-        const currentBalance = parseFloat(sub.profiles?.wallet_balance || 0);
-        const credit = parseFloat(sub.calculated_credit || 0);
-        const newBalance = Number((currentBalance + credit).toFixed(2));
+        // Fetch current profile balance and credit
+        const { data: profile } = await sbAdmin.from("profiles").select("wallet_balance").eq("id", targetUserId).single();
+        const currentBal = parseFloat(profile?.wallet_balance || 0);
+        const newBalance = Number((currentBal + creditAmount).toFixed(2));
 
         await sbAdmin
           .from("profiles")
-          .update({ wallet_balance: newBalance, updated_at: now })
-          .eq("id", sub.user_id);
+          .update({ wallet_balance: newBalance, updated_at: new Date().toISOString() })
+          .eq("id", targetUserId);
+
+        // Sync Redis immediately
+        await syncRedisBalance(targetUserId, newBalance);
 
         return new Response(JSON.stringify({ success: true, newBalance, submissionId }), {
           status: 200,
@@ -316,60 +390,50 @@ export default async (req: Request, _context: Context) => {
 
       // Mark submission as paid and deduct from worker balance
       if (action === "mark-paid") {
-        const { submissionId } = body;
-        if (!submissionId) {
-          return new Response(JSON.stringify({ success: false, error: "submissionId is required" }), {
-            status: 400,
-            headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
-          });
-        }
+        const { submissionId, userId, deductAmount } = body;
+        const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(submissionId);
+        let targetUserId = userId;
+        let deduction = parseFloat(deductAmount || 0);
 
-        try {
-          const { data: rpcRes, error: rpcErr } = await sbAdmin.rpc("mark_submission_as_paid", {
-            submission_id: submissionId,
-          });
+        if (isUUID) {
+          try {
+            await sbAdmin
+              .from("weekly_submissions")
+              .update({ status: "paid", paid_at: new Date().toISOString() })
+              .eq("id", submissionId);
 
-          if (!rpcErr && rpcRes && rpcRes.success) {
-            return new Response(JSON.stringify({ success: true, ...rpcRes }), {
-              status: 200,
-              headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
-            });
+            if (!targetUserId || !deduction) {
+              const { data: sub } = await sbAdmin.from("weekly_submissions").select("*").eq("id", submissionId).single();
+              if (sub) {
+                targetUserId = targetUserId || sub.user_id;
+                deduction = deduction || parseFloat(sub.calculated_credit || 0);
+              }
+            }
+          } catch (e) {
+            console.warn("DB submission mark-paid note:", e);
           }
-        } catch {
-          // fallback to direct admin table update
         }
 
-        // Direct table fallback
-        const { data: sub, error: subErr } = await sbAdmin
-          .from("weekly_submissions")
-          .select("*, profiles:user_id(*)")
-          .eq("id", submissionId)
-          .single();
+        if (targetUserId) {
+          const { data: profile } = await sbAdmin.from("profiles").select("wallet_balance").eq("id", targetUserId).single();
+          const currentBal = parseFloat(profile?.wallet_balance || 0);
+          const newBalance = Math.max(0, Number((currentBal - deduction).toFixed(2)));
 
-        if (subErr || !sub) {
-          return new Response(JSON.stringify({ success: false, error: subErr?.message || "Submission not found" }), {
-            status: 404,
+          await sbAdmin
+            .from("profiles")
+            .update({ wallet_balance: newBalance, updated_at: new Date().toISOString() })
+            .eq("id", targetUserId);
+
+          await syncRedisBalance(targetUserId, newBalance);
+
+          return new Response(JSON.stringify({ success: true, newBalance, submissionId }), {
+            status: 200,
             headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
           });
         }
 
-        const now = new Date().toISOString();
-        await sbAdmin
-          .from("weekly_submissions")
-          .update({ status: "paid", paid_at: now })
-          .eq("id", submissionId);
-
-        const currentBalance = parseFloat(sub.profiles?.wallet_balance || 0);
-        const deduction = parseFloat(sub.calculated_credit || 0);
-        const newBalance = Math.max(0, Number((currentBalance - deduction).toFixed(2)));
-
-        await sbAdmin
-          .from("profiles")
-          .update({ wallet_balance: newBalance, updated_at: now })
-          .eq("id", sub.user_id);
-
-        return new Response(JSON.stringify({ success: true, newBalance, submissionId }), {
-          status: 200,
+        return new Response(JSON.stringify({ success: false, error: "user_id not provided" }), {
+          status: 400,
           headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
         });
       }
@@ -382,6 +446,8 @@ export default async (req: Request, _context: Context) => {
           .from("profiles")
           .update({ wallet_balance: cleanBalance, updated_at: new Date().toISOString() })
           .eq("id", userId);
+
+        await syncRedisBalance(userId, cleanBalance);
 
         return new Response(JSON.stringify({ success: true, balance: cleanBalance }), {
           status: 200,

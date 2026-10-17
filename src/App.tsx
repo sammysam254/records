@@ -24,7 +24,17 @@ export function App() {
     await DataService.init();
     const loadedWorkers = await DataService.getWorkers(forceFresh);
     const loadedSubmissions = await DataService.getSubmissions(forceFresh);
-    const active = DataService.getCurrentUser(); // No auto-login fallback for strangers
+    let active = DataService.getCurrentUser(); // No auto-login fallback for strangers
+    if (active) {
+      const activeUser = active;
+      const fresh = loadedWorkers.find(
+        w => w.id === activeUser.id || (Boolean(w.email && activeUser.email) && w.email.toLowerCase() === activeUser.email.toLowerCase())
+      );
+      if (fresh) {
+        active = { ...activeUser, ...fresh };
+        DataService.setCurrentUser(active);
+      }
+    }
     
     setWorkers(loadedWorkers);
     setSubmissions(loadedSubmissions);

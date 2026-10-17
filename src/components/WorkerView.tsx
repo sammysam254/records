@@ -297,7 +297,7 @@ export const WorkerView: React.FC<WorkerViewProps> = ({
                 <button
                   type="button"
                   onClick={() => setIsWithdrawOpen(true)}
-                  disabled={worker.wallet_balance <= 0.83}
+                  disabled={worker.wallet_balance <= 0}
                   className="btn-primary"
                   style={{
                     width: '100%',
@@ -305,11 +305,11 @@ export const WorkerView: React.FC<WorkerViewProps> = ({
                     padding: '0.65rem 1rem',
                     fontSize: '0.88rem',
                     fontWeight: 700,
-                    background: worker.wallet_balance > 0.83
+                    background: worker.wallet_balance > 0
                       ? 'linear-gradient(135deg, #10b981 0%, #06b6d4 100%)'
                       : 'rgba(255, 255, 255, 0.05)',
-                    cursor: worker.wallet_balance > 0.83 ? 'pointer' : 'not-allowed',
-                    opacity: worker.wallet_balance > 0.83 ? 1 : 0.6
+                    cursor: worker.wallet_balance > 0 ? 'pointer' : 'not-allowed',
+                    opacity: worker.wallet_balance > 0 ? 1 : 0.6
                   }}
                 >
                   <ArrowDownToLine size={16} /> Withdraw to M-Pesa

@@ -569,25 +569,50 @@ export class DataService {
     if (!worker) return { success: false, error: 'Worker profile not found.' };
 
     const calculatedCredit = calculateWalletCredit(amount);
-    const supabase = getSupabase();
-
     let submissionId = 'sub_' + Math.random().toString(36).substring(2, 9);
 
-    if (supabase) {
-      try {
-        const { data, error } = await supabase.from('weekly_submissions').insert([{
-          user_id: userId,
-          amount_made: Number(amount.toFixed(2)),
-          calculated_credit: calculatedCredit,
-          status: 'pending',
-          week_date: new Date().toISOString().split('T')[0]
-        }]).select().single();
-
-        if (!error && data) {
-          submissionId = data.id;
+    // 1. Authoritative serverless insert (bypasses RLS with Supabase Admin)
+    try {
+      const resp = await fetch('/.netlify/functions/workers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'create-submission',
+          userId,
+          amountMade: amount,
+          calculatedCredit,
+          weekDate: new Date().toISOString().split('T')[0]
+        })
+      });
+      if (resp.ok) {
+        const d = await resp.json();
+        if (d.success && d.submission?.id) {
+          submissionId = d.submission.id;
         }
-      } catch (err) {
-        console.warn('Supabase submission insert error:', err);
+      }
+    } catch {
+      // offline / local fallback
+    }
+
+    // Direct client fallback if serverless did not assign UUID
+    if (submissionId.startsWith('sub_')) {
+      const supabase = getSupabase();
+      if (supabase) {
+        try {
+          const { data, error } = await supabase.from('weekly_submissions').insert([{
+            user_id: userId,
+            amount_made: Number(amount.toFixed(2)),
+            calculated_credit: calculatedCredit,
+            status: 'pending',
+            week_date: new Date().toISOString().split('T')[0]
+          }]).select().single();
+
+          if (!error && data) {
+            submissionId = data.id;
+          }
+        } catch (err) {
+          console.warn('Supabase submission insert error:', err);
+        }
       }
     }
 
@@ -758,7 +783,12 @@ export class DataService {
       const resp = await fetch('/.netlify/functions/workers', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'approve-submission', submissionId })
+        body: JSON.stringify({
+          action: 'approve-submission',
+          submissionId,
+          userId: worker.id,
+          credit: sub.calculated_credit
+        })
       });
       if (resp.ok) {
         const d = await resp.json();
@@ -845,7 +875,12 @@ export class DataService {
       const resp = await fetch('/.netlify/functions/workers', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'mark-paid', submissionId })
+        body: JSON.stringify({
+          action: 'mark-paid',
+          submissionId,
+          userId: worker.id,
+          deductAmount: deduction
+        })
       });
       if (resp.ok) {
         const d = await resp.json();
@@ -944,8 +979,8 @@ export class DataService {
   ): Promise<{ success: boolean; error?: string }> {
     if (!worker) return { success: false, error: 'Worker profile is required' };
 
-    if (amountUsd <= 0.83) {
-      return { success: false, error: 'Withdrawal amount must be greater than system transfer fee ($0.83).' };
+    if (amountUsd <= 0) {
+      return { success: false, error: 'Please enter a valid withdrawal amount.' };
     }
 
     if (worker.wallet_balance < amountUsd) {

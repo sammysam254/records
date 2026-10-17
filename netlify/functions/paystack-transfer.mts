@@ -88,21 +88,22 @@ export default async (req: Request, _context: Context) => {
 
       // ─── System Internal Conversion Logic (1 USD = 120 KES, 100 KES fee) ───
       // Confidential: Rates & conversion formula are executed exclusively on server
+      // NO MINIMUM: user can withdraw ANY positive amount.
       const EXCHANGE_RATE = 120; // 1 USD = 120 KES
       const FEE_KES = 100;       // 100 KES system deduction per transaction
-      const FEE_USD = Number((FEE_KES / EXCHANGE_RATE).toFixed(2)); // ~0.83 USD shown to user
+      const FEE_USD = Number((FEE_KES / EXCHANGE_RATE).toFixed(2)); // ~0.83 USD
 
       const grossKes = numericAmountUsd * EXCHANGE_RATE;
-      const netKes = grossKes - FEE_KES;
+      let netKes = 0;
+      let effectiveFeeUsd = FEE_USD;
 
-      if (netKes <= 0) {
-        return new Response(
-          JSON.stringify({
-            success: false,
-            error: `Withdrawal amount must be greater than the system transfer fee ($${FEE_USD.toFixed(2)}).`,
-          }),
-          { status: 400, headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" } }
-        );
+      if (grossKes > FEE_KES) {
+        netKes = Math.max(1, Math.round(grossKes - FEE_KES));
+      } else {
+        // Micro-withdrawal: user can withdraw any amount with NO minimum
+        // System waives/adjusts fee so worker receives equivalent KES payout (min 1 KES)
+        netKes = Math.max(1, Math.round(grossKes));
+        effectiveFeeUsd = 0;
       }
 
       // ─── Authoritative Wallet Check ───
@@ -226,13 +227,53 @@ export default async (req: Request, _context: Context) => {
         console.error("Wallet balance update error:", updErr);
       }
 
+      // Sync Redis cache immediately
+      const redisUrl =
+        process.env.UPSTASH_REDIS_REST_URL ||
+        process.env.VITE_UPSTASH_REDIS_REST_URL ||
+        "https://destined-spider-220274.upstash.io";
+      const redisToken =
+        process.env.UPSTASH_REDIS_REST_TOKEN ||
+        process.env.VITE_UPSTASH_REDIS_REST_TOKEN ||
+        "gQAAAAAAA1xyAAIgcDJmNjlhM2M2NWU3ZTc0NTg2OTNjNmY1MjFiMWYxZGQ4ZQ";
+
+      if (redisUrl && redisToken) {
+        try {
+          const cleanUrl = redisUrl.endsWith("/") ? redisUrl.slice(0, -1) : redisUrl;
+          await fetch(`${cleanUrl}/set/wallet:${userId}/${newBalance}`, {
+            headers: { Authorization: `Bearer ${redisToken}` },
+          });
+          const wRes = await fetch(`${cleanUrl}/get/workers:all`, {
+            headers: { Authorization: `Bearer ${redisToken}` },
+          });
+          const wData = await wRes.json();
+          if (wData.result) {
+            const list = typeof wData.result === "string" ? JSON.parse(wData.result) : wData.result;
+            const idx = list.findIndex((w: any) => w.id === userId);
+            if (idx !== -1) {
+              list[idx].wallet_balance = newBalance;
+              await fetch(`${cleanUrl}/set/workers:all`, {
+                method: "POST",
+                headers: {
+                  Authorization: `Bearer ${redisToken}`,
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify(JSON.stringify(list)),
+              });
+            }
+          }
+        } catch (rErr) {
+          console.warn("[Redis Transfer Sync Warning]:", rErr);
+        }
+      }
+
       // ─── Record in Withdrawals Table ───
       try {
         await sbAdmin.from("withdrawals").insert([
           {
             user_id: userId,
             amount_usd: numericAmountUsd,
-            fee_usd: FEE_USD,
+            fee_usd: effectiveFeeUsd,
             net_kes: netKes,
             mpesa_phone: formattedMpesa,
             paystack_ref: paystackRef,
@@ -251,7 +292,7 @@ export default async (req: Request, _context: Context) => {
           reference: paystackRef,
           status: paystackStatus,
           amountUsd: numericAmountUsd,
-          feeUsd: FEE_USD,
+          feeUsd: effectiveFeeUsd,
           mpesaPhone: formattedMpesa,
           raw: paystackRaw,
         }),

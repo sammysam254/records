@@ -86,16 +86,18 @@ export const WithdrawModal: React.FC<WithdrawModalProps> = ({
   if (!isOpen || !worker) return null;
 
   const numericAmount = parseFloat(amountUsd) || 0;
-  const netAmount = Math.max(0, Number((numericAmount - FEE_USD).toFixed(2)));
+  const isMicro = numericAmount > 0 && numericAmount <= FEE_USD;
+  const feeDisplay = isMicro ? 0.00 : (numericAmount > FEE_USD ? FEE_USD : 0.00);
+  const netAmount = Math.max(0, Number((numericAmount - feeDisplay).toFixed(2)));
   const availableBalance = worker.wallet_balance || 0;
 
   // Quick Max button
   const handleSetMax = () => {
-    if (availableBalance > FEE_USD) {
+    if (availableBalance > 0) {
       setAmountUsd(availableBalance.toFixed(2));
       setErrorMessage(null);
     } else {
-      setErrorMessage(`Your wallet balance ($${availableBalance.toFixed(2)}) is less than the transfer fee ($${FEE_USD.toFixed(2)}).`);
+      setErrorMessage(`Your wallet balance is $0.00.`);
     }
   };
 
@@ -104,8 +106,8 @@ export const WithdrawModal: React.FC<WithdrawModalProps> = ({
     e.preventDefault();
     setErrorMessage(null);
 
-    if (numericAmount <= FEE_USD) {
-      setErrorMessage(`Withdrawal amount must be greater than the transfer fee ($${FEE_USD.toFixed(2)}).`);
+    if (numericAmount <= 0) {
+      setErrorMessage('Please enter a valid withdrawal amount.');
       return;
     }
 
@@ -358,7 +360,7 @@ export const WithdrawModal: React.FC<WithdrawModalProps> = ({
                   type="number"
                   inputMode="decimal"
                   step="0.01"
-                  min="0.84"
+                  min="0.01"
                   max={availableBalance}
                   required
                   placeholder="0.00"
@@ -428,7 +430,11 @@ export const WithdrawModal: React.FC<WithdrawModalProps> = ({
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-muted)' }}>
                 <span>Transfer Processing Fee:</span>
-                <span style={{ color: '#fbbf24', fontWeight: 600 }}>-${FEE_USD.toFixed(2)}</span>
+                {isMicro ? (
+                  <span style={{ color: 'var(--accent-emerald)', fontWeight: 600 }}>$0.00 (Waived)</span>
+                ) : (
+                  <span style={{ color: '#fbbf24', fontWeight: 600 }}>-${FEE_USD.toFixed(2)}</span>
+                )}
               </div>
               <div
                 style={{
@@ -469,7 +475,7 @@ export const WithdrawModal: React.FC<WithdrawModalProps> = ({
             {/* Submit Button */}
             <button
               type="submit"
-              disabled={isSendingOtp || numericAmount <= FEE_USD || numericAmount > availableBalance}
+              disabled={isSendingOtp || numericAmount <= 0 || numericAmount > availableBalance}
               className="btn-primary"
               style={{ padding: '0.85rem', justifyContent: 'center', fontSize: '0.95rem' }}
             >
