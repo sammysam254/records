@@ -186,10 +186,18 @@ export const WithdrawModal: React.FC<WithdrawModalProps> = ({
         onShowToast(`Withdrawal of $${numericAmount.toFixed(2)} disbursed to M-Pesa ${mpesaPhone}!`);
         onSuccess();
       } else {
-        setErrorMessage(res.error || 'Failed to complete withdrawal.');
+        const rawErr = res.error || 'Failed to complete withdrawal.';
+        const cleanErr = rawErr.includes('<') || rawErr.includes('JSON')
+          ? 'Payment gateway communication error. Please try again.'
+          : rawErr;
+        setErrorMessage(cleanErr);
       }
     } catch (err: any) {
-      setErrorMessage(err.message || 'Withdrawal processing failed');
+      const rawMsg = err?.message || 'Withdrawal processing failed';
+      const cleanMsg = rawMsg.includes('<') || rawMsg.includes('JSON')
+        ? 'Payment gateway communication error. Please try again.'
+        : rawMsg;
+      setErrorMessage(cleanMsg);
     } finally {
       setIsVerifying(false);
     }

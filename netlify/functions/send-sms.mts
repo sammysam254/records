@@ -1,5 +1,9 @@
 import type { Context } from "@netlify/functions";
 
+export const config = {
+  path: ["/api/send-sms", "/.netlify/functions/send-sms"]
+};
+
 export default async (req: Request, context: Context) => {
   // CORS preflight
   if (req.method === "OPTIONS") {

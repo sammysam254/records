@@ -1,5 +1,9 @@
 import type { Context } from "@netlify/functions";
 
+export const config = {
+  path: ["/api/check-balance", "/.netlify/functions/check-balance"]
+};
+
 export default async (req: Request, context: Context) => {
   if (req.method === "OPTIONS") {
     return new Response(null, {
