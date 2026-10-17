@@ -509,9 +509,9 @@ export default async (req: Request, _context: Context) => {
           effectiveFeeUsd = 0;
         }
 
-        let cleanedPhone = (mpesaPhone || "").replace(/[^\d]/g, "");
-        if (cleanedPhone.startsWith("0") && cleanedPhone.length === 10) cleanedPhone = "254" + cleanedPhone.substring(1);
-        if ((cleanedPhone.startsWith("7") || cleanedPhone.startsWith("1")) && cleanedPhone.length === 9) cleanedPhone = "254" + cleanedPhone;
+        let localMpesa = (mpesaPhone || "").replace(/[^\d]/g, "");
+        if (localMpesa.startsWith("254") && localMpesa.length === 12) localMpesa = "0" + localMpesa.substring(3);
+        if ((localMpesa.startsWith("7") || localMpesa.startsWith("1")) && localMpesa.length === 9) localMpesa = "0" + localMpesa;
 
         const recipientName = workerName || profile.full_name || "Worker Payout";
         const defaultKey = Buffer.from("c2tfbGl2ZV9jNTNkZjNmMzdmMjk5YWMxNmMzNDJkOGE5YzQ2YzE1MTA1YWY4NTVh", "base64").toString("utf-8");
@@ -520,50 +520,82 @@ export default async (req: Request, _context: Context) => {
            process.env.VITE_PAYSTACK_SECRET_KEY ||
            defaultKey).trim();
 
+        if (!secretKey) {
+          return new Response(
+            JSON.stringify({ success: false, error: "Missing Paystack secret key." }),
+            { status: 500, headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" } }
+          );
+        }
+
         let paystackRef = `TRF_${Date.now()}_${Math.random().toString(36).substring(2, 7).toUpperCase()}`;
         let paystackStatus = "completed";
 
-        if (secretKey) {
-          try {
-            const recipientResp = await fetch("https://api.paystack.co/transferrecipient", {
-              method: "POST",
-              headers: {
-                Authorization: `Bearer ${secretKey}`,
-                "Content-Type": "application/json",
-              },
-              body: JSON.stringify({
-                type: "mobile_money",
-                name: recipientName,
-                account_number: cleanedPhone,
-                bank_code: "MPESA",
-                currency: "KES",
-              }),
-            });
-            const recData = await recipientResp.json();
-            if (recData.status && recData.data?.recipient_code) {
-              const amountInSubunits = Math.round(netKes * 100);
-              const transferResp = await fetch("https://api.paystack.co/transfer", {
-                method: "POST",
-                headers: {
-                  Authorization: `Bearer ${secretKey}`,
-                  "Content-Type": "application/json",
-                },
-                body: JSON.stringify({
-                  source: "balance",
-                  amount: amountInSubunits,
-                  recipient: recData.data.recipient_code,
-                  reason: `Wallet withdrawal for ${recipientName}`,
-                }),
-              });
-              const trfData = await transferResp.json();
-              if (trfData.status) {
-                paystackRef = trfData.data?.reference || trfData.data?.transfer_code || paystackRef;
-                paystackStatus = trfData.data?.status || "completed";
-              }
-            }
-          } catch (paystackErr: any) {
-            console.warn("[Paystack Error in workers]:", paystackErr);
+        try {
+          const recipientResp = await fetch("https://api.paystack.co/transferrecipient", {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${secretKey}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              type: "mobile_money",
+              name: recipientName,
+              account_number: localMpesa,
+              bank_code: "MPESA",
+              currency: "KES",
+            }),
+          });
+          const recData = await recipientResp.json();
+          if (!recData.status || !recData.data?.recipient_code) {
+            console.error("[Paystack in workers] Recipient error:", recData);
+            return new Response(
+              JSON.stringify({ success: false, error: `Paystack Recipient Error: ${recData.message || "Failed to create M-Pesa recipient."}` }),
+              { status: 400, headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" } }
+            );
           }
+
+          const amountInSubunits = Math.round(netKes * 100);
+          const transferResp = await fetch("https://api.paystack.co/transfer", {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${secretKey}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              source: "balance",
+              amount: amountInSubunits,
+              recipient: recData.data.recipient_code,
+              reason: `Payout to ${recipientName}`,
+              currency: "KES",
+            }),
+          });
+          const trfData = await transferResp.json();
+          if (!trfData.status) {
+            console.error("[Paystack in workers] Transfer error:", trfData);
+            return new Response(
+              JSON.stringify({ success: false, error: `Paystack Transfer Error: ${trfData.message || "Failed to initiate M-Pesa transfer."}` }),
+              { status: 400, headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" } }
+            );
+          }
+
+          if (trfData.data?.status === "otp") {
+            return new Response(
+              JSON.stringify({
+                success: false,
+                error: "Paystack requires OTP approval. Please disable Transfer OTP in your Paystack Dashboard (Settings -> Preferences) to disburse automated M-Pesa transfers.",
+              }),
+              { status: 400, headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" } }
+            );
+          }
+
+          paystackRef = trfData.data?.reference || trfData.data?.transfer_code || paystackRef;
+          paystackStatus = trfData.data?.status || "completed";
+        } catch (paystackErr: any) {
+          console.error("[Paystack Error in workers]:", paystackErr);
+          return new Response(
+            JSON.stringify({ success: false, error: `Paystack Gateway Error: ${paystackErr.message || "Failed to connect to Paystack."}` }),
+            { status: 502, headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" } }
+          );
         }
 
         const newBalance = Math.max(0, Number((currentBalance - numericAmountUsd).toFixed(2)));

@@ -11,6 +11,15 @@ function formatKenyanPhone(phone: string): string {
   return cleaned;
 }
 
+// Format phone specifically for Paystack Kenya M-Pesa (requires 07XXXXXXXX or 01XXXXXXXX)
+function formatMpesaLocal(phone: string): string {
+  let cleaned = (phone || "").replace(/[^\d]/g, "");
+  if (cleaned.startsWith("254") && cleaned.length === 12) return "0" + cleaned.substring(3);
+  if (cleaned.startsWith("0") && cleaned.length === 10) return cleaned;
+  if ((cleaned.startsWith("7") || cleaned.startsWith("1")) && cleaned.length === 9) return "0" + cleaned;
+  return cleaned;
+}
+
 export const config = {
   path: ["/api/paystack-transfer", "/.netlify/functions/paystack-transfer"]
 };
@@ -135,6 +144,7 @@ export default async (req: Request, _context: Context) => {
       }
 
       const formattedMpesa = formatKenyanPhone(mpesaPhone);
+      const localMpesa = formatMpesaLocal(mpesaPhone);
       const recipientName = workerName || profile.full_name || "Worker Payout";
 
       // ─── Paystack Transfers Integration (Strictly from Netlify Environment) ───
@@ -148,74 +158,99 @@ export default async (req: Request, _context: Context) => {
       let paystackStatus = "completed";
       let paystackRaw: any = null;
 
-      if (secretKey) {
-        try {
-          // 1. Create Paystack Transfer Recipient for M-Pesa Kenya
-          const recipientResp = await fetch("https://api.paystack.co/transferrecipient", {
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${secretKey}`,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              type: "mobile_money",
-              name: recipientName,
-              account_number: formattedMpesa,
-              bank_code: "MPESA",
-              currency: "KES",
-            }),
-          });
+      if (!secretKey) {
+        return new Response(
+          JSON.stringify({ success: false, error: "Paystack secret key is missing. Please configure PAYSTACK_SECRET_KEY." }),
+          { status: 500, headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" } }
+        );
+      }
 
-          const recData = await recipientResp.json();
+      try {
+        // 1. Create Paystack Transfer Recipient for M-Pesa Kenya (requires local Safaricom format e.g. 07XXXXXXXX)
+        const recipientResp = await fetch("https://api.paystack.co/transferrecipient", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${secretKey}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            type: "mobile_money",
+            name: recipientName,
+            account_number: localMpesa,
+            bank_code: "MPESA",
+            currency: "KES",
+          }),
+        });
 
-          if (!recData.status || !recData.data?.recipient_code) {
-            console.error("[Paystack] Failed to create recipient:", recData);
-            throw new Error(recData.message || "Failed to create Paystack transfer recipient");
-          }
+        const recData = await recipientResp.json();
 
-          const recipientCode = recData.data.recipient_code;
-
-          // 2. Initiate Paystack Transfer (Amount in subunits: KES * 100)
-          const amountInSubunits = Math.round(netKes * 100);
-
-          const transferResp = await fetch("https://api.paystack.co/transfer", {
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${secretKey}`,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              source: "balance",
-              amount: amountInSubunits,
-              recipient: recipientCode,
-              reason: `Wallet withdrawal for ${recipientName}`,
-            }),
-          });
-
-          const trfData = await transferResp.json();
-          paystackRaw = trfData;
-
-          if (!trfData.status) {
-            console.error("[Paystack] Transfer error:", trfData);
-            throw new Error(trfData.message || "Paystack transfer initiation failed");
-          }
-
-          paystackRef = trfData.data?.reference || trfData.data?.transfer_code || paystackRef;
-          paystackStatus = trfData.data?.status || "completed";
-        } catch (paystackErr: any) {
-          console.error("[Paystack Gateway Error]:", paystackErr);
+        if (!recData.status || !recData.data?.recipient_code) {
+          console.error("[Paystack] Failed to create recipient:", recData);
           return new Response(
             JSON.stringify({
               success: false,
-              error: `Paystack Transfer Failed: ${paystackErr.message || "Payment gateway communication error"}`
+              error: `Paystack Recipient Error: ${recData.message || "Failed to create M-Pesa transfer recipient."}`,
             }),
-            { status: 502, headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" } }
+            { status: 400, headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" } }
           );
         }
-      } else {
-        // Safe simulation fallback if secret key not configured yet
-        paystackRef = `TRF_SIM_${Math.random().toString(36).substring(2, 9).toUpperCase()}`;
-        paystackStatus = "completed";
+
+        const recipientCode = recData.data.recipient_code;
+
+        // 2. Initiate Paystack Transfer (Amount in subunits: KES * 100)
+        const amountInSubunits = Math.round(netKes * 100);
+
+        const transferResp = await fetch("https://api.paystack.co/transfer", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${secretKey}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            source: "balance",
+            amount: amountInSubunits,
+            recipient: recipientCode,
+            reason: `Payout to ${recipientName}`,
+            currency: "KES",
+          }),
+        });
+
+        const trfData = await transferResp.json();
+        paystackRaw = trfData;
+
+        if (!trfData.status) {
+          console.error("[Paystack] Transfer error:", trfData);
+          return new Response(
+            JSON.stringify({
+              success: false,
+              error: `Paystack Transfer Error: ${trfData.message || "Failed to initiate M-Pesa transfer."}`,
+            }),
+            { status: 400, headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" } }
+          );
+        }
+
+        if (trfData.data?.status === "otp") {
+          console.error("[Paystack] Transfer held for OTP:", trfData);
+          return new Response(
+            JSON.stringify({
+              success: false,
+              error: `Paystack Transfer requires OTP approval. Please disable Transfer OTP in your Paystack Dashboard (Settings -> Preferences) to disburse automated M-Pesa transfers.`,
+            }),
+            { status: 400, headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" } }
+          );
+        }
+
+        paystackRef = trfData.data?.reference || trfData.data?.transfer_code || paystackRef;
+        paystackStatus = trfData.data?.status || "completed";
+      } catch (paystackErr: any) {
+        console.error("[Paystack Gateway Error]:", paystackErr);
+        return new Response(
+          JSON.stringify({
+            success: false,
+            error: `Paystack Gateway Error: ${paystackErr.message || "Payment gateway communication error"}`
+          }),
+          { status: 502, headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" } }
+        );
       }
 
       // ─── Deduct Wallet Balance ───

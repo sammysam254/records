@@ -1125,39 +1125,13 @@ export class DataService {
         reference = data.reference || `TRF_${Date.now()}`;
         feeUsd = data.feeUsd !== undefined ? data.feeUsd : 0.83;
         resolvedStatus = (data.status as any) || 'completed';
-      } else if (data && !data.success && data.error) {
-        return { success: false, error: data.error };
+      } else if (data && !data.success) {
+        return { success: false, error: data.error || 'Paystack transfer failed.' };
       } else {
-        // 3. Resilient fallback: Serverless endpoints returned HTML or were unreachable.
-        // Perform direct Supabase balance deduction & record withdrawal.
-        const currentBal = worker.wallet_balance || 0;
-        newBalance = Math.max(0, Number((currentBal - amountUsd).toFixed(2)));
-        reference = `TRF_MPESA_${Date.now()}_${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
-
-        const supabase = getSupabase();
-        if (supabase) {
-          try {
-            await supabase
-              .from('profiles')
-              .update({ wallet_balance: newBalance, updated_at: new Date().toISOString() })
-              .eq('id', worker.id);
-
-            await supabase.from('withdrawals').insert([
-              {
-                user_id: worker.id,
-                amount_usd: amountUsd,
-                fee_usd: feeUsd,
-                net_kes: Math.max(1, Math.round(amountUsd * 120 - 100)),
-                mpesa_phone: formatKenyanPhone(mpesaPhone),
-                paystack_ref: reference,
-                paystack_status: 'completed',
-                created_at: new Date().toISOString()
-              }
-            ]);
-          } catch (wErr) {
-            console.warn('Withdrawal fallback database update warning:', wErr);
-          }
-        }
+        return {
+          success: false,
+          error: 'Unable to reach payment gateway. Please ensure your internet connection is active and try again.'
+        };
       }
 
       // Update worker wallet in local cache & Redis
